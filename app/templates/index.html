@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 语音转写服务{% endblock %}
+
+{% block content %}
+<div class="px-4 py-5 text-center">
+    <h1 class="display-5 fw-bold">语音转写服务</h1>
+    <div class="col-lg-8 mx-auto">
+        <p class="lead mb-4">
+            使用尖端的人工智能技术，将您的音频快速准确地转换为文本。
+            支持多种语言，高效处理各种音频文件。
+        </p>
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mb-5">
+            <a href="/web/transcribe" class="btn btn-primary btn-lg px-4 gap-3">开始转写</a>
+            <a href="/web/tasks" class="btn btn-outline-secondary btn-lg px-4">查看任务</a>
+        </div>
+    </div>
+</div>
+
+<div class="container px-4 py-5">
+    <h2 class="pb-2 border-bottom">主要功能</h2>
+    <div class="row g-4 py-5 row-cols-1 row-cols-lg-3">
+        <div class="col d-flex align-items-start">
+            <div class="icon-square text-bg-light d-inline-flex align-items-center justify-content-center fs-4 flex-shrink-0 me-3">
+                <i class="bi bi-translate"></i>
+            </div>
+            <div>
+                <h3 class="fs-2">多语言支持</h3>
+                <p>支持多种语言的转写，包括中文、英语、日语等。智能识别语言，无需手动指定。</p>
+            </div>
+        </div>
+        <div class="col d-flex align-items-start">
+            <div class="icon-square text-bg-light d-inline-flex align-items-center justify-content-center fs-4 flex-shrink-0 me-3">
+                <i class="bi bi-speedometer"></i>
+            </div>
+            <div>
+                <h3 class="fs-2">高效处理</h3>
+                <p>采用先进的WhisperX技术，高效处理各种长度的音频文件，支持批量处理和异步通知。</p>
+            </div>
+        </div>
+        <div class="col d-flex align-items-start">
+            <div class="icon-square text-bg-light d-inline-flex align-items-center justify-content-center fs-4 flex-shrink-0 me-3">
+                <i class="bi bi-file-earmark-text"></i>
+            </div>
+            <div>
+                <h3 class="fs-2">结果导出</h3>
+                <p>提供多种格式的转写结果，包括纯文本、带时间戳的文本等，方便用户进行后续处理。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container px-4 py-5">
+    <h2 class="pb-2 border-bottom">使用流程</h2>
+    <div class="row g-4 py-5">
+        <div class="col-md-12">
+            <ol class="list-group list-group-numbered mb-3">
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div class="ms-2 me-auto">
+                        <div class="fw-bold">上传音频文件</div>
+                        上传需要转写的音频文件，支持多种格式（MP3, WAV, M4A等）
+                    </div>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div class="ms-2 me-auto">
+                        <div class="fw-bold">等待处理</div>
+                        系统会自动处理您的音频文件，处理完成后会通知您
+                    </div>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-start">
+                    <div class="ms-2 me-auto">
+                        <div class="fw-bold">查看和下载结果</div>
+                        查看转写结果，并可以下载为各种格式
+                    </div>
+                </li>
+            </ol>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 检查登录状态，如果已登录，修改按钮链接
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            const startBtn = document.querySelector('a[href="/web/transcribe"]');
+            const registerBtn = document.querySelector('a[href="/web/register"]');
+            
+            if (registerBtn) {
+                registerBtn.href = '/web/dashboard';
+                registerBtn.textContent = '查看仪表板';
+            }
+        }
+    });
+</script>
+{% endblock %} 

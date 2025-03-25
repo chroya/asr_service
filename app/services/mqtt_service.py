@@ -15,17 +15,20 @@ class MQTTService:
     
     def __init__(self):
         """初始化MQTT客户端"""
-        self.client = mqtt.Client(client_id=settings.MQTT_CLIENT_ID)
+        self.client = mqtt.Client()
         
         # 设置认证信息（如果有）
         if settings.MQTT_USERNAME and settings.MQTT_PASSWORD:
             self.client.username_pw_set(settings.MQTT_USERNAME, settings.MQTT_PASSWORD)
+            self.client.tls_set(ca_certs=settings.MQTT_CERT_PATH)
         
         # 设置回调
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         
         # 连接MQTT broker
+        logger.info(f"Connecting to MQTT broker {settings.MQTT_BROKER}:{settings.MQTT_PORT}")
+        print(f"Connecting to MQTT broker {settings.MQTT_BROKER}:{settings.MQTT_PORT}")
         try:
             self.client.connect(settings.MQTT_BROKER, settings.MQTT_PORT)
             self.client.loop_start()
@@ -42,7 +45,7 @@ class MQTTService:
     def _on_disconnect(self, client, userdata, rc):
         """断开连接回调"""
         if rc != 0:
-            logger.warning("MQTT意外断开连接")
+            logger.warning("MQTT意外断开连接, rc: {rc}")
             # 尝试重新连接
             try:
                 self.client.reconnect()

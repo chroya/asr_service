@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 from typing import Optional
 
 # 加载环境变量
-load_dotenv()
+# load_dotenv()
 
-class Settings(BaseSettings):
+class Settings():
     """应用设置"""
     # 基础设置
     APP_NAME: str = os.getenv("APP_NAME", "ASR Service")
@@ -33,11 +33,12 @@ class Settings(BaseSettings):
     # MQTT_USERNAME: str = ""
     # MQTT_PASSWORD: str = ""
 
-    MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service")
+    MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service_111")
     MQTT_BROKER: str = "s55f779f.ala.cn-hangzhou.emqxsl.cn"
     MQTT_PORT: int = 8883
     MQTT_USERNAME: str = "test2"
     MQTT_PASSWORD: str = "test2"
+    MQTT_CERT_PATH: str = os.getenv("MQTT_CERT_PATH", "./cert/emqxsl-ca.crt")
     
     # 文件上传设置
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")

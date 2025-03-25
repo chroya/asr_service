@@ -11,7 +11,7 @@ from app.db.database import get_db
 from app.models.api_models import TranscriptionCreate, TranscriptionResponse, TranscriptionStatus, TranscriptionResult
 from app.models.models import Transcription
 from app.core.config import settings
-from app.services.transcription import TranscriptionService
+from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
 from app.utils.files import validate_audio_file, save_upload_file, get_file_size_mb
 from app.utils.error_codes import (

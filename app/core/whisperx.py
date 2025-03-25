@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, Tuple, Callable
 from datetime import datetime
 from faster_whisper import transcribe
 from app.core.config import settings
+from app.utils.time import convert_to_time_format
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +126,24 @@ class WhisperXProcessor:
                     full_text += segment["text"] + " "
             
             # 构建最终结果
-            result = {
-                "text": full_text.strip(),
-                "language": detected_language,
-                "segments": transcription.get("segments", [])
-            }
+            result = [
+                    {
+                        "id": i,
+                        "start": convert_to_time_format(segment.get("start", 0)),
+                        "end": convert_to_time_format(segment.get("end", 0)),
+                        "speaker": segment.get("speaker", "SPEAKER_00"),
+                        "text": segment.get("text", ""),
+                        "seek": segment.get("seek", 0),
+                        "tokens": segment.get("tokens", [0]),
+                        "temperature": segment.get("temperature", 0),
+                        "avg_logprob": segment.get("avg_logprob", 0),
+                        "compression_ratio": segment.get("compression_ratio", 0),
+                        "no_speech_prob": segment.get("no_speech_prob", 0),
+                        "sid": segment.get("sid", 0),
+                        "language": detected_language
+                    }
+                    for i, segment in enumerate(transcription.get("segments", []))
+                ]
             
             # 保存结果
             if callback:

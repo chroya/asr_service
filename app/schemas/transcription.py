@@ -48,7 +48,6 @@ class TranscriptionTask(BaseModel):
     progress: Optional[int] = Field(0, description="处理进度（0-100）")
     progress_message: Optional[str] = Field(None, description="进度信息")
     error_message: Optional[str] = Field(None, description="错误信息（如果失败）")
-    result: Optional[Dict[str, Any]] = Field(None, description="转写结果")
     audio_duration: Optional[float] = Field(None, description="音频时长（秒）")
     processing_time: Optional[float] = Field(None, description="处理用时（秒）")
     extra_params: Optional[TranscriptionExtraParams] = Field(None, description="额外参数")

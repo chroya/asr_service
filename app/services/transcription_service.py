@@ -99,7 +99,7 @@ class TranscriptionService:
         )
         
         # 存储任务数据
-        self.storage.save(task_id, task.dict())
+        self.storage.save(task_id, task.model_dump())
         
         # 添加到客户端任务列表
         self._add_to_client_tasks(client_id, task_id)

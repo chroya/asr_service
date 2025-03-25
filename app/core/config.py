@@ -25,16 +25,18 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD", None)
     
     # MQTT设置
-    MQTT_BROKER: str = "broker.emqx.io"
-    MQTT_PORT: int = 1883
+    # MQTT_BROKER: str = "broker.emqx.io"
+    # MQTT_PORT: int = 1883
+    MQTT_BROKER: str = "s55f779f.ala.cn-hangzhou.emqxsl.cn"
+    MQTT_PORT: int = 8883
     MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service")
-    MQTT_USERNAME: str = ""
-    MQTT_PASSWORD: str = ""
+    MQTT_USERNAME: str = "test2"
+    MQTT_PASSWORD: str = "test2"
     
     # 文件上传设置
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     TRANSCRIPTION_DIR: str = os.getenv("TRANSCRIPTION_DIR", "./transcriptions")
-    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "25000000"))  # 默认25MB
+    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "250000000"))  # 默认250MB
     
     # 用户限制设置
     DEFAULT_USER_LIMIT_COUNT: int = int(os.getenv("DEFAULT_USER_LIMIT_COUNT", "10"))
@@ -45,7 +47,7 @@ class Settings(BaseSettings):
     CLOUD_API_KEY: Optional[str] = os.getenv("CLOUD_API_KEY")
 
     # 文件下载设置
-    BASE_URL: str = os.getenv("BASE_URL", "http://localhost:8000")
+    BASE_URL: str = os.getenv("BASE_URL", "http://150.109.15.121:8000")
     DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/transcription/download")
 
     class Config:

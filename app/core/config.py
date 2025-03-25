@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from typing import Optional
 
 # 加载环境变量
-# load_dotenv()
+load_dotenv()
 
 class Settings():
     """应用设置"""
@@ -17,6 +17,14 @@ class Settings():
 
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
     WHISPER_MODEL_NAME: str = os.getenv("WHISPER_MODEL_NAME", "")
+    
+    # 日志设置
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_FORMAT: str = os.getenv("LOG_FORMAT", "%(asctime)s [%(levelname)s] [%(name)s] %(message)s")
+    LOG_DIR: str = os.getenv("LOG_DIR", "logs")
+    LOG_FILE: str = os.getenv("LOG_FILE", "asr_service.log")
+    LOG_BACKUP_COUNT: int = int(os.getenv("LOG_BACKUP_COUNT", "72"))  # 3天
+    LOG_CONSOLE_OUTPUT: bool = os.getenv("LOG_CONSOLE_OUTPUT", "True").lower() in ("true", "1", "t")
     
     # 数据库设置
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./asr_service.db")

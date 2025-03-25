@@ -8,13 +8,10 @@ from dotenv import load_dotenv
 
 from app.api.routes import router as api_router
 from app.core.config import settings
+from app.utils.logging_config import setup_logging
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()]
-)
+setup_logging(log_level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 

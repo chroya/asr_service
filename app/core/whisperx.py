@@ -5,7 +5,7 @@ import torch
 import whisperx
 from typing import Dict, Any, Optional, Tuple, Callable
 from datetime import datetime
-
+from faster_whisper import transcribe
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class WhisperXProcessor:
                 callback(20, "正在转写音频...")
             
             # 加载whisper模型
-            model = self._get_model("base")
+            model = self._get_model("tiny")
             
             # 转写音频
             # transcription = whisperx.transcribe(
@@ -175,10 +175,19 @@ class WhisperXProcessor:
         """
         if model_size not in self.model_cache:
             logger.info(f"加载WhisperX模型: {model_size}")
+            asr_options = {
+                "multilingual": True,
+                "max_new_tokens": 512,
+                "clip_timestamps": 60,
+                "hallucination_silence_threshold": 0.5,
+                "hotwords": None
+            }
+            
             self.model_cache[model_size] = whisperx.load_model(
                 model_size,
                 device=DEVICE,
-                compute_type="float16" if DEVICE == "cuda" else "float32"
+                compute_type="float16" if DEVICE == "cuda" else "float32",
+                # asr_options=asr_options
             )
         
         return self.model_cache[model_size]

@@ -64,3 +64,51 @@ class TranscriptionTask(BaseModel):
                 }
             }
         } 
+
+class RateLimitInfo(BaseModel):
+    """
+    API 速率限制信息
+    """
+    limit_audio_seconds: int = Field(..., description="当前用户每日可上传音频秒数")
+    limit_requests: int = Field(..., description="当前用户每日可发起请求数")
+    remaining_audio_seconds: int = Field(..., description="剩余的每日音频秒数")
+    remaining_requests: int = Field(..., description="剩余的每日请求次数")
+    reset_audio_seconds: float = Field(..., description="距离音频限制重置的剩余秒数")
+    reset_requests: float = Field(..., description="距离请求限制重置的剩余秒数")
+    retry_after: Optional[float] = Field(None, description="如果达到限制，需要等待的秒数")
+
+class TranscriptionResponse(BaseModel):
+    """
+    转写任务响应，包含任务信息和速率限制信息
+    """
+    task: TranscriptionTask
+    rate_limit: RateLimitInfo
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "task": {
+                    "task_id": "123e4567-e89b-12d3-a456-426614174000",
+                    # ... 其他 TranscriptionTask 示例保持不变 ...
+                },
+                "rate_limit": {
+                    "limit_audio_seconds": 28800,
+                    "limit_requests": 2000,
+                    "remaining_audio_seconds": 7121,
+                    "remaining_requests": 1985,
+                    "reset_audio_seconds": 39.5,
+                    "reset_requests": 43.2,
+                    "retry_after": None
+                }
+            }
+        }
+
+class RateLimitConfig(BaseModel):
+    """
+    速率限制配置
+    """
+    monthly_minutes: int = Field(300, description="每月音频分钟数")
+    rpm: int = Field(20, description="每分钟请求数")
+    rpd: int = Field(2000, description="每日请求数")
+    ash: int = Field(7200, description="每小时音频秒数")
+    asd: int = Field(28800, description="每日音频秒数") 

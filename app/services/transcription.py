@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.whisperx import WhisperXProcessor
 from app.utils.storage import RedisStorage
-from app.schemas.transcription import TranscriptionTask
+from app.utils.error_codes import (
+    SUCCESS, ERROR_FILE_NOT_FOUND, ERROR_PROCESSING_FAILED, 
+    ERROR_MESSAGES, get_error_message
+)
+from app.schemas.transcription import TranscriptionTask, TranscriptionExtraParams
 from app.services.mqtt_service import mqtt_service
 
 logger = logging.getLogger(__name__)
@@ -41,7 +45,12 @@ class TranscriptionService:
         result_path: str,
         original_filename: str,
         client_id: str,
-        language: Optional[str] = None
+        language: Optional[str] = None,
+        u_id: Optional[int] = None,
+        uuid: Optional[str] = None,
+        mode_id: Optional[int] = None,
+        ai_mode: Optional[str] = None,
+        speaker: bool = False
     ) -> TranscriptionTask:
         """
         创建新的转写任务
@@ -53,10 +62,27 @@ class TranscriptionService:
             original_filename: 原始文件名
             client_id: 客户端ID
             language: 音频语言代码（可选）
+            u_id: 用户ID
+            uuid: 唯一标识符
+            mode_id: 模板ID
+            ai_mode: AI模式
+            speaker: 是否启用说话人分离
             
         Returns:
             TranscriptionTask: 创建的任务信息
         """
+        # 创建额外参数
+        extra_params = TranscriptionExtraParams(
+            u_id=u_id,
+            record_file_name=original_filename,
+            uuid=uuid,
+            task_id=task_id,
+            mode_id=mode_id,
+            language=language or "auto",
+            ai_mode=ai_mode,
+            speaker=speaker
+        )
+        
         # 创建任务数据
         task = TranscriptionTask(
             task_id=task_id,
@@ -66,7 +92,10 @@ class TranscriptionService:
             file_path=file_path,
             result_path=result_path,
             language=language,
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().isoformat(),
+            extra_params=extra_params.dict() if extra_params else None,
+            code=SUCCESS,  # 创建任务时设置为成功状态
+            message=get_error_message(SUCCESS),  # 没有错误信息
         )
         
         # 存储任务数据
@@ -206,7 +235,9 @@ class TranscriptionService:
             error_message=None,
             result=None,
             started_at=None,
-            completed_at=None
+            completed_at=None,
+            code=SUCCESS,  # 重置为成功状态码
+            message=get_error_message(SUCCESS)  # 清空错误消息
         )
         
         return task
@@ -230,7 +261,9 @@ class TranscriptionService:
             self.update_task(
                 task_id,
                 status="failed",
-                error_message="音频文件不存在"
+                error_message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND],
+                code=ERROR_FILE_NOT_FOUND,  # 设置错误码
+                message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND]  # 设置错误消息
             )
             logger.error(f"任务音频文件不存在: {task.file_path}")
             return
@@ -243,48 +276,64 @@ class TranscriptionService:
                 started_at=datetime.now().isoformat()
             )
             
+            # 获取额外参数
+            language = task.language
+            speaker_diarization = task.extra_params.speaker if task.extra_params else False
+            
+            if task.extra_params and 'language' in task.extra_params:
+                language = task.extra_params.get('language')
+                
+            if task.extra_params and 'speaker' in task.extra_params:
+                speaker_diarization = task.extra_params.get('speaker', False)
+            
             # 开始处理
             start_time = time.time()
             result, audio_duration = await self.processor.process_audio(
                 task.file_path,
                 task.result_path,
-                task_id=task_id,
-                language=task.language,
-                callback=lambda p, m: self._update_progress(task_id, p, m)
+                task_id,
+                language=language if language != "auto" else None,
+                speaker_diarization=speaker_diarization,
+                callback=lambda progress, message: self._update_progress(task_id, progress, message)
             )
-            end_time = time.time()
             
-            # 处理完成，保存结果
-            processing_time = end_time - start_time
-            logger.info(f"任务完成 {task_id}: 音频长度={audio_duration}秒, 处理时间={processing_time:.2f}秒")
+            # 计算处理时间
+            processing_time = time.time() - start_time
             
             # 更新任务状态和结果
             self.update_task(
                 task_id,
                 status="completed",
+                result=result,
                 completed_at=datetime.now().isoformat(),
                 audio_duration=audio_duration,
                 processing_time=processing_time,
-                result=result
+                progress=100,
+                progress_message="处理完成",
+                code=SUCCESS,  # 成功状态码
+                message=get_error_message(SUCCESS)  # 成功状态消息为空
             )
             
-            # 构建结果文件路径和文件名
-            result_filename = f"{task_id}.json"
+            # 发送MQTT通知
+            mqtt_service.send_transcription_complete(task_id)
             
-            # 发送MQTT消息通知
-            mqtt_service.send_transcription_complete(task_id, result_filename)
-            
-            # 调用完成回调
+            # 如果有回调，调用回调函数
             if on_complete:
                 on_complete(audio_duration)
-            
+                
         except Exception as e:
-            logger.exception(f"处理任务时出错 {task_id}: {str(e)}")
+            # 更新任务状态为失败
+            error_message = str(e)
             self.update_task(
                 task_id,
                 status="failed",
-                error_message=str(e)
+                error_message=error_message,
+                completed_at=datetime.now().isoformat(),
+                code=ERROR_PROCESSING_FAILED,  # 处理失败错误码
+                message=get_error_message(ERROR_PROCESSING_FAILED, f"处理失败: {error_message}")  # 错误消息
             )
+            logger.exception(f"处理任务失败: {task_id} - {error_message}")
+            
     
     def _update_progress(self, task_id: str, progress: int, message: str) -> None:
         """更新任务进度"""

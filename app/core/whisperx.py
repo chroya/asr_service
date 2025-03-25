@@ -33,6 +33,7 @@ class WhisperXProcessor:
         result_path: str,
         task_id: str,
         language: Optional[str] = None,
+        speaker_diarization: bool = False,
         callback: Optional[Callable[[int, str], None]] = None
     ) -> Tuple[Dict[str, Any], float]:
         """
@@ -40,14 +41,16 @@ class WhisperXProcessor:
         
         Args:
             file_path: 音频文件路径
+            result_path: 结果文件路径
             task_id: 任务ID
             language: 音频语言代码（如不提供则自动检测）
+            speaker_diarization: 是否启用说话人分离
             callback: 进度回调函数，接收进度百分比和消息参数
             
         Returns:
             Tuple[Dict[str, Any], float]: 转写结果和音频时长
         """
-        logger.info(f"开始处理音频文件: {file_path}, 任务ID: {task_id}")
+        logger.info(f"开始处理音频文件: {file_path}, 任务ID: {task_id}, 语言: {language}, 启用说话人分离: {speaker_diarization}")
         
         # 更新进度
         if callback:
@@ -59,16 +62,14 @@ class WhisperXProcessor:
                 callback(20, "正在转写音频...")
             
             # 加载whisper模型
-            model = self._get_model("tiny")
+            model = self._get_model(settings.WHISPER_MODEL_NAME)
             
-            # 转写音频
-            # transcription = whisperx.transcribe(
-            #     audio=file_path,
-            #     model=model,
-            #     language=language,
-            #     device=DEVICE
-            # )
-            transcription = model.transcribe(file_path, batch_size=16)
+            # 转写音频，如果指定了语言则传入
+            transcription = model.transcribe(
+                file_path, 
+                batch_size=16,
+                language=language,
+            )
             
             # 提取检测到的语言
             detected_language = transcription.get("language", language)
@@ -77,57 +78,45 @@ class WhisperXProcessor:
             if callback:
                 callback(50, "正在对齐时间戳...")
             
-            # 步骤2: 使用VAD过滤
-            # if audio_duration > 1.0:  # 只有当音频长度大于1秒时进行VAD过滤
-            #     try:
-            #         # 加载VAD模型
-            #         vad_model, vad_metadata = whisperx.load_vad_model(DEVICE)
+            # 启用说话人分离
+            if speaker_diarization and audio_duration > 1.0:
+                try:
+                    if callback:
+                        callback(60, "正在进行说话人分离...")
                     
-            #         # 使用VAD过滤
-            #         vad_segments = whisperx.get_vad_segments(
-            #             file_path, 
-            #             vad_model,
-            #             vad_metadata, 
-            #             DEVICE,
-            #             min_speech_duration_ms=250
-            #         )
+                    # 加载说话人分离模型
+                    diarize_model = whisperx.DiarizationPipeline(
+                        use_auth_token=settings.HF_TOKEN, 
+                        device=DEVICE
+                    )
                     
-            #         if callback:
-            #             callback(60, "正在对齐文本...")
+                    # 执行说话人分离
+                    diarize_segments = diarize_model(
+                        file_path,
+                        min_speakers=1,
+                        max_speakers=5
+                    )
                     
-            #         # 步骤3: 加载对齐模型
-            #         if detected_language:
-            #             # 对齐模型只支持部分语言
-            #             supported_langs = ["en", "zh", "de", "es", "fr", "it", "ja", "ko", "pl", "pt", "ru", "tr", "nl", "ca"]
-            #             if detected_language in supported_langs:
-            #                 try:
-            #                     align_model, align_metadata = whisperx.load_align_model(
-            #                         language_code=detected_language,
-            #                         device=DEVICE
-            #                     )
-                                
-            #                     # 对齐转写结果
-            #                     aligned_transcription = whisperx.align(
-            #                         transcription["segments"],
-            #                         align_model,
-            #                         align_metadata,
-            #                         file_path,
-            #                         DEVICE,
-            #                     )
-                                
-            #                     # 更新segments
-            #                     transcription["segments"] = aligned_transcription["segments"]
-                                
-            #                     if callback:
-            #                         callback(70, "正在完善对齐结果...")
-            #                 except Exception as e:
-            #                     logger.warning(f"对齐模型加载或处理失败，使用原始转写结果: {str(e)}")
-            #     except Exception as e:
-            #         logger.warning(f"VAD处理失败，使用原始转写结果: {str(e)}")
+                    if callback:
+                        callback(70, "正在合并说话人信息...")
+                    
+                    # 将说话人信息与转写结果合并
+                    result = whisperx.assign_word_speakers(
+                        diarize_segments,
+                        transcription
+                    )
+                    
+                    # 更新segments
+                    transcription["segments"] = result["segments"]
+                    
+                    if callback:
+                        callback(80, "说话人分离完成...")
+                except Exception as e:
+                    logger.warning(f"说话人分离失败，使用原始转写结果: {str(e)}")
             
             # 步骤4: 提取完整文本
             if callback:
-                callback(80, "正在生成最终结果...")
+                callback(90, "正在生成最终结果...")
             
             # 从segments中提取完整文本
             full_text = ""
@@ -144,12 +133,12 @@ class WhisperXProcessor:
             
             # 保存结果
             if callback:
-                callback(90, "正在保存结果...")
+                callback(95, "正在保存结果...")
             
             with open(result_path, "w", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             
-            logger.info(f"音频处理完成: {task_id}, 时长: {audio_duration}秒")
+            logger.info(f"音频处理完成: {task_id}, 时长: {audio_duration}秒, 语言: {detected_language}")
             
             # 完成
             if callback:

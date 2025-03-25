@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key_change_in_production")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+
+    HF_TOKEN: str = os.getenv("HF_TOKEN", "")
+    WHISPER_MODEL_NAME: str = os.getenv("WHISPER_MODEL_NAME", "")
     
     # 数据库设置
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./asr_service.db")
@@ -27,9 +30,12 @@ class Settings(BaseSettings):
     # MQTT设置
     # MQTT_BROKER: str = "broker.emqx.io"
     # MQTT_PORT: int = 1883
+    # MQTT_USERNAME: str = ""
+    # MQTT_PASSWORD: str = ""
+
+    MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service")
     MQTT_BROKER: str = "s55f779f.ala.cn-hangzhou.emqxsl.cn"
     MQTT_PORT: int = 8883
-    MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service")
     MQTT_USERNAME: str = "test2"
     MQTT_PASSWORD: str = "test2"
     

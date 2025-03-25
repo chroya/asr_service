@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -18,6 +18,19 @@ class TranscriptionResult(BaseModel):
     language: Optional[str] = Field(None, description="检测到的语言代码")
     segments: List[TranscriptionSegment] = Field(default_factory=list, description="带时间戳的文本片段")
 
+class TranscriptionExtraParams(BaseModel):
+    """
+    转写任务的额外参数
+    """
+    u_id: int = Field(..., description="用户唯一标识ID")
+    record_file_name: str = Field(..., description="录音文件名")
+    uuid: str = Field(..., description="任务的唯一UUID，用于关联后续操作")
+    task_id: str = Field(..., description="任务ID，格式为 UID:{用户ID}_文件前2MB内容的MD5")
+    mode_id: int = Field(..., description="使用的模板ID（提示词模板）")
+    language: str = Field(..., description="语言")
+    ai_mode: str = Field(..., description="使用的AI模式（如 GPT-4o）")
+    speaker: bool = Field(..., description="是否启用说话人分离")
+
 class TranscriptionTask(BaseModel):
     """
     转写任务详情
@@ -27,7 +40,7 @@ class TranscriptionTask(BaseModel):
     status: str = Field(..., description="任务状态：pending, processing, completed, failed")
     filename: str = Field(..., description="原始文件名")
     file_path: str = Field(..., description="文件存储路径")
-    result_path: str = Field(..., description="结果文件存储路径")
+    result_path: Optional[str] = Field(None, description="结果文件存储路径")
     language: Optional[str] = Field(None, description="指定的语言（如未指定则为自动检测）")
     created_at: str = Field(..., description="创建时间")
     started_at: Optional[str] = Field(None, description="开始处理时间")
@@ -38,16 +51,18 @@ class TranscriptionTask(BaseModel):
     result: Optional[Dict[str, Any]] = Field(None, description="转写结果")
     audio_duration: Optional[float] = Field(None, description="音频时长（秒）")
     processing_time: Optional[float] = Field(None, description="处理用时（秒）")
+    extra_params: Optional[TranscriptionExtraParams] = Field(None, description="额外参数")
+    code: int = Field(0, description="状态码：0表示成功，其他值表示失败")
+    message: str = Field("", description="状态消息，成功时为空，失败时为错误信息")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "task_id": "123e4567-e89b-12d3-a456-426614174000",
                 "client_id": "client-123",
                 "status": "completed",
                 "filename": "meeting.mp3",
                 "file_path": "/uploads/123e4567-e89b-12d3-a456-426614174000.mp3",
-                "result_path": "/transcriptions/123e4567-e89b-12d3-a456-426614174000.json",
                 "language": "zh",
                 "created_at": "2023-06-15T10:30:00",
                 "started_at": "2023-06-15T10:30:05",
@@ -55,14 +70,17 @@ class TranscriptionTask(BaseModel):
                 "progress": 100,
                 "audio_duration": 60.5,
                 "processing_time": 70.2,
-                "result": {
-                    "text": "这是一段完整的转写文本。",
+                "code": 0,
+                "message": "",
+                "extra_params": {
+                    "u_id": 12345,
+                    "record_file_name": "会议记录.mp3",
+                    "uuid": "abc123-def456-ghi789",
+                    "task_id": "UID:12345_a1b2c3d4e5f6",
+                    "mode_id": 1,
                     "language": "zh",
-                    "segments": [
-                        {"start": 0.0, "end": 2.5, "text": "这是"},
-                        {"start": 2.5, "end": 5.0, "text": "一段完整的"},
-                        {"start": 5.0, "end": 7.5, "text": "转写文本。"}
-                    ]
+                    "ai_mode": "GPT-4o",
+                    "speaker": True
                 }
             }
         } 
@@ -87,7 +105,7 @@ class TranscriptionResponse(BaseModel):
     rate_limit: RateLimitInfo
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "task": {
                     "task_id": "123e4567-e89b-12d3-a456-426614174000",

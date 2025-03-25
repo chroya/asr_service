@@ -101,12 +101,12 @@ API接口文档可以通过访问 http://localhost:8000/api/docs 获取。主要
   - 登录: `POST /api/auth/token`
   - 用户信息: `GET /api/auth/me`
   
-- 转写: `/api/transcription/`
-  - 创建转写任务: `POST /api/transcription/`
-  - 获取任务状态: `GET /api/transcription/{task_id}`
-  - 获取转写结果: `GET /api/transcription/{task_id}/result`
-  - 获取任务列表: `GET /api/transcription/`
-  - 删除任务: `DELETE /api/transcription/{task_id}`
+- 转写: `/api/uploadfile/`
+  - 创建转写任务: `POST /api/uploadfile/`
+  - 获取任务状态: `GET /api/uploadfile/{task_id}`
+  - 获取转写结果: `GET /api/uploadfile/{task_id}/result`
+  - 获取任务列表: `GET /api/uploadfile/`
+  - 删除任务: `DELETE /api/uploadfile/{task_id}`
 
 - 用户: `/api/users/`
   - 获取用户信息: `GET /api/users/me`

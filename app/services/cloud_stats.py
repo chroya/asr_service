@@ -110,3 +110,44 @@ class CloudStatsService:
         
         # 在后台运行，不阻塞主线程
         asyncio.create_task(self._send_data("stats/client", data)) 
+
+    async def get_rate_limit_info(self, client_id: str) -> Dict[str, Any]:
+        """
+        获取当前的速率限制信息
+        
+        Args:
+            client_id: 客户端ID
+        
+        Returns:
+            Dict[str, Any]: 包含速率限制信息的字典
+        """
+        if not self.enabled:
+            logger.info("云统计服务未启用，无法获取速率限制信息")
+            return RateLimitInfo()
+
+        # 待调整
+        rate_limit_info = {
+            "limit_audio_seconds": 1000,  # 每小时的音频限制
+            "limit_requests": 100,  # 每小时的请求限制
+            "remaining_audio_seconds": 800,  # 剩余音频限制
+            "remaining_requests": 80,  # 剩余请求数
+            "reset_audio_seconds": datetime.now().isoformat(),  # 重置时间
+            "reset_requests": datetime.now().isoformat(),  # 重置时间
+            "retry_after": 60  # 重新请求的等待时间（秒）
+        }
+
+
+        logger.info(f"获取客户端 {client_id} 的速率限制信息成功")
+        return RateLimitInfo(**rate_limit_info)
+
+
+class RateLimitInfo:
+    def __init__(self, limit_audio_seconds: int, limit_requests: int, remaining_audio_seconds: int, remaining_requests: int, reset_audio_seconds: str, reset_requests: str, retry_after: int):
+        self.limit_audio_seconds = limit_audio_seconds
+        self.limit_requests = limit_requests
+        self.remaining_audio_seconds = remaining_audio_seconds
+        self.remaining_requests = remaining_requests
+        self.reset_audio_seconds = reset_audio_seconds
+        self.reset_requests = reset_requests
+        self.retry_after = retry_after
+    

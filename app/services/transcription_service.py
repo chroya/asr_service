@@ -97,7 +97,7 @@ def transcribe_audio(
         
         # 加载WhisperX模型
         start_time = time.time()
-        model = whisperx.load_model("base", device)
+        model = whisperx.load_model(settings.WHISPER_MODEL_NAME, device)
         
         # 设置转写语言
         transcribe_options = {}

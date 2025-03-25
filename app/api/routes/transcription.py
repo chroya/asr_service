@@ -15,7 +15,13 @@ from app.core.config import settings
 from app.services.transcription import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
 from app.utils.files import validate_audio_file, save_upload_file, get_file_size_mb
-from app.schemas.transcription import TranscriptionTask
+from app.utils.error_codes import (
+    SUCCESS, ERROR_FILE_NOT_FOUND, ERROR_PROCESSING_FAILED, 
+    ERROR_INVALID_FILE_FORMAT, ERROR_FILE_TOO_LARGE,
+    ERROR_TASK_NOT_FOUND, ERROR_TASK_NOT_COMPLETED, ERROR_RESULT_NOT_FOUND,
+    ERROR_MESSAGES, get_error_message
+)
+from app.schemas.transcription import TranscriptionTask, RateLimitInfo
 
 router = APIRouter()
 
@@ -23,37 +29,78 @@ router = APIRouter()
 transcription_service = TranscriptionService()
 cloud_stats_service = CloudStatsService()
 
+def add_rate_limit_headers(response: Response, client_id: str) -> None:
+    """
+    向响应头添加速率限制信息
+    
+    Args:
+        response: FastAPI响应对象
+        client_id: 客户端ID
+    """
+    # rate_limit_info = cloud_stats_service.get_rate_limit_info(client_id)
+    # if rate_limit_info:
+    #     response.headers["X-Rate-Limit-Audio-Seconds"] = str(rate_limit_info.limit_audio_seconds)
+    #     response.headers["X-Rate-Limit-Requests"] = str(rate_limit_info.limit_requests)
+    #     response.headers["X-Rate-Remaining-Audio-Seconds"] = str(rate_limit_info.remaining_audio_seconds)
+    #     response.headers["X-Rate-Remaining-Requests"] = str(rate_limit_info.remaining_requests)
+    #     response.headers["X-Rate-Reset-Audio-Seconds"] = str(rate_limit_info.reset_audio_seconds)
+    #     response.headers["X-Rate-Reset-Requests"] = str(rate_limit_info.reset_requests)
+    #     if rate_limit_info.retry_after:
+    #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
+
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
 async def create_transcription_task(
     background_tasks: BackgroundTasks,
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
-    language: Optional[str] = Form(None)
+    language: Optional[str] = Form(None),
+    u_id: int = Form(...),
+    uuid: str = Form(...),
+    task_id: str = Form(...),
+    mode_id: int = Form(...),
+    ai_mode: str = Form(...),
+    speaker: bool = Form(False)
 ):
     """
     创建一个新的转写任务
     """
-    # 获取客户端ID（从请求头）
-    client_id = request.headers.get("X-Client-ID", str(uuid.uuid4()))
     
     # 验证文件
     if not validate_audio_file(file):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="无效的音频文件。支持的格式：MP3, WAV, FLAC, M4A, OGG"
+        error_response = TranscriptionTask(
+            task_id=task_id,
+            client_id=str(u_id),
+            status="failed",
+            filename=file.filename,
+            file_path="",
+            created_at=datetime.now().isoformat(),
+            code=ERROR_INVALID_FILE_FORMAT,
+            message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT]
         )
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return error_response
     
     # 检查文件大小
     file_size_mb = await get_file_size_mb(file)
     if file_size_mb > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"文件大小超过限制。最大允许: {settings.MAX_UPLOAD_SIZE}MB"
+        error_response = TranscriptionTask(
+            task_id=task_id,
+            client_id=str(u_id),
+            status="failed",
+            filename=file.filename,
+            file_path="",
+            created_at=datetime.now().isoformat(),
+            code=ERROR_FILE_TOO_LARGE,
+            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE}MB"
         )
+        response.status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        return error_response
     
     # 保存上传的文件
     filename = file.filename
-    task_id = str(uuid.uuid4())
+    client_id = str(u_id)
+
     file_path = await save_upload_file(file, task_id)
     # 创建结果文件路径
     result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}.json")
@@ -65,7 +112,12 @@ async def create_transcription_task(
         result_path=result_path,
         original_filename=filename,
         client_id=client_id,
-        language=language
+        language=language,
+        u_id=u_id,
+        uuid=uuid,
+        mode_id=mode_id,
+        ai_mode=ai_mode,
+        speaker=speaker
     )
     
     # 将任务添加到后台处理队列
@@ -75,33 +127,63 @@ async def create_transcription_task(
         on_complete=lambda duration: cloud_stats_service.report_task_completion(client_id, duration)
     )
     
+    # 添加速率限制信息到响应头
+    add_rate_limit_headers(response, client_id)
+    
     return task
 
 @router.get("/{task_id}", response_model=TranscriptionTask)
-async def get_task(task_id: str):
+async def get_task(task_id: str, request: Request, response: Response):
     """
     获取转写任务的状态和信息
     """
     task = transcription_service.get_task(task_id)
     if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="任务不存在"
+        error_response = TranscriptionTask(
+            task_id=task_id,
+            client_id="unknown",
+            status="failed",
+            filename="",
+            file_path="",
+            created_at=datetime.now().isoformat(),
+            code=ERROR_TASK_NOT_FOUND,
+            message=ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
         )
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return error_response
+    
+    # 获取客户端ID
+    client_id = request.headers.get("X-Client-ID", task.client_id)
+    
+    # 添加速率限制信息到响应头
+    add_rate_limit_headers(response, client_id)
     
     return task
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, request: Request, response: Response):
     """
     删除转写任务
     """
     task = transcription_service.get_task(task_id)
     if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="任务不存在"
+        error_response = {
+            "task_id": task_id,
+            "status": "failed",
+            "code": ERROR_TASK_NOT_FOUND,
+            "message": ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
+        }
+        return Response(
+            content=json.dumps(error_response, ensure_ascii=False),
+            media_type="application/json",
+            status_code=status.HTTP_404_NOT_FOUND
         )
+    
+    # 获取客户端ID
+    client_id = request.headers.get("X-Client-ID", task.client_id)
+    
+    # 添加速率限制信息到响应头
+    add_rate_limit_headers(response, client_id)
     
     transcription_service.delete_task(task_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -110,20 +192,32 @@ async def delete_task(task_id: str):
 async def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
-    request: Request
+    request: Request,
+    response: Response
 ):
     """
     重试失败的转写任务
     """
     task = transcription_service.get_task(task_id)
     if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="任务不存在"
+        error_response = TranscriptionTask(
+            task_id=task_id,
+            client_id="unknown",
+            status="failed",
+            filename="",
+            file_path="",
+            created_at=datetime.now().isoformat(),
+            code=ERROR_TASK_NOT_FOUND,
+            message=ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
         )
+        response.status_code = status.HTTP_404_NOT_FOUND
+        return error_response
     
     # 获取客户端ID（从请求头）
     client_id = request.headers.get("X-Client-ID", task.client_id)
+    
+    # 添加速率限制信息到响应头
+    add_rate_limit_headers(response, client_id)
     
     # 重置任务状态
     task = transcription_service.reset_task(task_id)
@@ -138,28 +232,55 @@ async def retry_task(
     return task
 
 @router.get("/{task_id}/download", response_class=Response)
-async def download_task_result(task_id: str):
+async def download_task_result(task_id: str, request: Request, response: Response):
     """
     下载转写任务的结果
     """
     task = transcription_service.get_task(task_id)
     if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="任务不存在"
+        error_response = {
+            "task_id": task_id,
+            "status": "failed",
+            "code": ERROR_TASK_NOT_FOUND,
+            "message": ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
+        }
+        return Response(
+            content=json.dumps(error_response, ensure_ascii=False),
+            media_type="application/json",
+            status_code=status.HTTP_404_NOT_FOUND
         )
     
+    # 获取客户端ID
+    client_id = request.headers.get("X-Client-ID", task.client_id)
+    
+    # 添加速率限制信息到响应头
+    add_rate_limit_headers(response, client_id)
+    
     if task.status != "completed":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="任务尚未完成"
+        error_response = {
+            "task_id": task_id,
+            "status": task.status,
+            "code": ERROR_TASK_NOT_COMPLETED,
+            "message": ERROR_MESSAGES[ERROR_TASK_NOT_COMPLETED]
+        }
+        return Response(
+            content=json.dumps(error_response, ensure_ascii=False),
+            media_type="application/json",
+            status_code=status.HTTP_400_BAD_REQUEST
         )
     
     result = task.result
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="任务结果不存在"
+        error_response = {
+            "task_id": task_id,
+            "status": "failed",
+            "code": ERROR_RESULT_NOT_FOUND,
+            "message": ERROR_MESSAGES[ERROR_RESULT_NOT_FOUND]
+        }
+        return Response(
+            content=json.dumps(error_response, ensure_ascii=False),
+            media_type="application/json",
+            status_code=status.HTTP_404_NOT_FOUND
         )
     
     # 创建结果JSON文件
@@ -170,12 +291,13 @@ async def download_task_result(task_id: str):
         content=result_json,
         media_type="application/json",
         headers={
-            "Content-Disposition": f'attachment; filename="{task_id}.json"'
+            "Content-Disposition": f'attachment; filename="{task_id}.json"',
+            **response.headers
         }
     )
 
 @router.get("/download/{task_id}", response_class=Response)
-async def download_result_file(task_id: str):
+async def download_result_file(task_id: str, request: Request, response: Response):
     """
     通过任务ID和文件名下载转写结果文件
     """
@@ -185,9 +307,16 @@ async def download_result_file(task_id: str):
     
     # 检查文件是否存在
     if not os.path.exists(file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="文件不存在"
+        error_response = {
+            "task_id": task_id,
+            "status": "failed",
+            "code": ERROR_RESULT_NOT_FOUND,
+            "message": ERROR_MESSAGES[ERROR_RESULT_NOT_FOUND]
+        }
+        return Response(
+            content=json.dumps(error_response, ensure_ascii=False),
+            media_type="application/json",
+            status_code=status.HTTP_404_NOT_FOUND
         )
     
     # 读取文件内容
@@ -204,10 +333,13 @@ async def download_result_file(task_id: str):
     )
 
 @router.get("/client/{client_id}/tasks", response_model=List[TranscriptionTask])
-async def get_client_tasks(client_id: str, limit: int = 10, offset: int = 0):
+async def get_client_tasks(client_id: str, request: Request, response: Response, limit: int = 10, offset: int = 0):
     """
     获取指定客户端的所有转写任务
     """
+    # 添加速率限制信息到响应头
+    add_rate_limit_headers(response, client_id)
+    
     tasks = transcription_service.get_client_tasks(client_id, limit, offset)
     return tasks
 
@@ -243,9 +375,16 @@ async def delete_transcription(
     ).first()
     
     if not transcription:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="找不到转写任务"
+        error_response = {
+            "task_id": task_id,
+            "status": "failed",
+            "code": ERROR_TASK_NOT_FOUND,
+            "message": ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
+        }
+        return Response(
+            content=json.dumps(error_response, ensure_ascii=False),
+            media_type="application/json",
+            status_code=status.HTTP_404_NOT_FOUND
         )
     
     # 删除相关文件

@@ -10,7 +10,6 @@ from datetime import datetime
 from app.db.database import get_db
 from app.models.api_models import TranscriptionCreate, TranscriptionResponse, TranscriptionStatus, TranscriptionResult
 from app.models.models import Transcription
-from app.services.transcription_service import create_transcription_task, transcribe_audio, update_transcription_result
 from app.core.config import settings
 from app.services.transcription import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
@@ -21,7 +20,7 @@ from app.utils.error_codes import (
     ERROR_TASK_NOT_FOUND, ERROR_TASK_NOT_COMPLETED, ERROR_RESULT_NOT_FOUND,
     ERROR_MESSAGES, get_error_message
 )
-from app.schemas.transcription import TranscriptionTask, RateLimitInfo
+from app.schemas.transcription import TranscriptionTask, RateLimitInfo, TranscriptionExtraParams
 
 router = APIRouter()
 
@@ -48,26 +47,63 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
     #     if rate_limit_info.retry_after:
     #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
 async def create_transcription_task(
     background_tasks: BackgroundTasks,
     request: Request,
     response: Response,
     file: UploadFile = File(...),
-    language: Optional[str] = Form(None),
-    u_id: int = Form(...),
-    uuid: str = Form(...),
-    task_id: str = Form(...),
-    mode_id: int = Form(...),
-    ai_mode: str = Form(...),
-    speaker: bool = Form(False)
+    extra_params: str = Form(...)  # 接收JSON字符串
 ):
     """
     创建一个新的转写任务
+    
+    参数:
+        file: 要转写的音频文件
+        extra_params: JSON字符串，包含额外参数:
+            {
+                "u_id": 用户ID,
+                "record_file_name": 文件名,
+                "uuid": 唯一标识符,
+                "task_id": 任务ID,
+                "mode_id": 模式ID,
+                "language": 语言代码,
+                "ai_mode": AI模式,
+                "speaker": 是否启用说话人分离(布尔值)
+            }
     """
+    try:
+        # 解析 extra_params JSON 字符串
+        params = json.loads(extra_params)
+        
+        # 提取参数
+        u_id = params.get("u_id")
+        task_id = params.get("task_id")
+        language = params.get("language", "auto")
+        uuid_str = params.get("uuid")
+        mode_id = params.get("mode_id")
+        ai_mode = params.get("ai_mode")
+        speaker = params.get("speaker", False)
+        
+        # 验证必须的参数
+        if not all([u_id, task_id, uuid_str, mode_id, ai_mode]):
+            raise ValueError("缺少必要的参数")
+    except (json.JSONDecodeError, ValueError) as e:
+        error_response = TranscriptionTask(
+            task_id=task_id if 'task_id' in locals() else "unknown",
+            client_id=str(u_id) if 'u_id' in locals() else "unknown",
+            status="failed",
+            filename=file.filename,
+            file_path="",
+            created_at=datetime.now().isoformat(),
+            code=ERROR_PROCESSING_FAILED,
+            message=f"解析参数失败: {str(e)}"
+        )
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return error_response
     
     # 验证文件
-    if not validate_audio_file(file):
+    if not await validate_audio_file(file):
         error_response = TranscriptionTask(
             task_id=task_id,
             client_id=str(u_id),
@@ -114,7 +150,7 @@ async def create_transcription_task(
         client_id=client_id,
         language=language,
         u_id=u_id,
-        uuid=uuid,
+        uuid=uuid_str,
         mode_id=mode_id,
         ai_mode=ai_mode,
         speaker=speaker
@@ -399,26 +435,3 @@ async def delete_transcription(
     db.commit()
     
     return None
-
-# 后台任务处理函数
-async def process_transcription(db: Session, task_id: str, file_path: str, language: Optional[str] = None):
-    """
-    处理转写任务（后台任务）
-    """
-    result = transcribe_audio(task_id, file_path, language)
-    
-    if result["success"]:
-        update_transcription_result(
-            db,
-            task_id,
-            "completed",
-            transcription_path=result["transcription_path"],
-            audio_duration=result["audio_duration"]
-        )
-    else:
-        update_transcription_result(
-            db,
-            task_id,
-            "failed",
-            error_message=result["error"]
-        ) 

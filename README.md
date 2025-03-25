@@ -112,6 +112,24 @@ API接口文档可以通过访问 http://localhost:8000/api/docs 获取。主要
   - 获取用户信息: `GET /api/users/me`
   - 获取用户限制: `GET /api/users/me/limits`
 
+#### 示例：创建转写任务
+
+```bash
+curl -X POST "http://localhost:8000/api/uploadfile" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/audio.mp3" \
+  -F "extra_params={
+    \"u_id\": 111,
+    \"record_file_name\": \"audio.mp3\",
+    \"uuid\": \"f62b91e6b6f04d6793e16f8ef5d03dc3\",
+    \"task_id\": \"79edb736a27979ac5d2b024749499864\",
+    \"mode_id\": 10001,
+    \"language\": \"zh\",
+    \"ai_mode\": \"GPT-4o\",
+    \"speaker\": false
+  }"
+```
+
 ## 部署指南
 
 ### 使用Docker部署

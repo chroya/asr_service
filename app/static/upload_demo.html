@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASR 服务 - 音频转写演示</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        .container {
+            max-width: 800px;
+        }
+        .result-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .result-content {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4 text-center">音频转写演示</h1>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">上传音频文件</h5>
+            </div>
+            <div class="card-body">
+                <form id="upload-form">
+                    <div class="mb-3">
+                        <label for="audioFile" class="form-label">选择音频文件</label>
+                        <input class="form-control" type="file" id="audioFile" name="file" accept=".mp3,.wav,.m4a,.ogg,.flac" required>
+                        <div class="form-text">支持的格式: MP3, WAV, M4A, OGG, FLAC. 最大文件大小: 250MB</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="language" class="form-label">语言 (可选)</label>
+                        <select class="form-select" id="language">
+                            <option value="auto">自动检测</option>
+                            <option value="zh">中文</option>
+                            <option value="en">英语</option>
+                            <option value="ja">日语</option>
+                            <option value="ko">韩语</option>
+                            <option value="fr">法语</option>
+                            <option value="de">德语</option>
+                            <option value="es">西班牙语</option>
+                            <option value="ru">俄语</option>
+                            <option value="it">意大利语</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="userId" class="form-label">用户ID (u_id)</label>
+                        <input type="number" class="form-control" id="userId" value="111" required>
+                        <div class="form-text">用于控制使用限额的标识符</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="speaker-diarization">
+                            <label class="form-check-label" for="speaker-diarization">
+                                启用说话人分离（多人对话推荐）
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary" id="submit-btn">
+                            <span id="spinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            <span id="btn-text">开始转写</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 任务状态和结果 -->
+        <div class="card mt-4 d-none" id="status-card">
+            <div class="card-header">
+                <h5 class="mb-0">转写状态</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>任务ID:</strong> <span id="task-id"></span>
+                </div>
+                <div class="mb-3">
+                    <strong>状态:</strong> <span id="task-status"></span>
+                </div>
+                <div class="mb-3">
+                    <div class="progress">
+                        <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    </div>
+                </div>
+                <div class="d-grid gap-2">
+                    <button id="check-status-btn" class="btn btn-info">刷新状态</button>
+                    <button id="download-result-btn" class="btn btn-success d-none">下载结果</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 转写结果 -->
+        <div class="card mt-4 d-none" id="result-card">
+            <div class="card-header">
+                <h5 class="mb-0">转写结果</h5>
+            </div>
+            <div class="card-body">
+                <div class="result-container">
+                    <pre class="result-content" id="result-text"></pre>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 错误信息 -->
+        <div class="card mt-4 d-none" id="error-card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">错误</h5>
+            </div>
+            <div class="card-body">
+                <p id="error-message" class="text-danger"></p>
+                <div class="d-grid">
+                    <button id="retry-btn" class="btn btn-secondary">重试</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadForm = document.getElementById('upload-form');
+            const submitBtn = document.getElementById('submit-btn');
+            const spinner = document.getElementById('spinner');
+            const btnText = document.getElementById('btn-text');
+            const statusCard = document.getElementById('status-card');
+            const resultCard = document.getElementById('result-card');
+            const errorCard = document.getElementById('error-card');
+            const checkStatusBtn = document.getElementById('check-status-btn');
+            const downloadResultBtn = document.getElementById('download-result-btn');
+            const retryBtn = document.getElementById('retry-btn');
+            
+            let currentTaskId = null;
+            
+            // 生成随机UUID
+            function generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0;
+                    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+            
+            // 生成任务ID
+            function generateTaskId(fileName) {
+                // 简化版，实际生产中应该使用更可靠的方法
+                return 'task_' + Math.random().toString(36).substring(2, 15);
+            }
+            
+            // 显示错误信息
+            function showError(message) {
+                document.getElementById('error-message').textContent = message;
+                errorCard.classList.remove('d-none');
+            }
+            
+            // 提交表单
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // 显示提交状态
+                submitBtn.disabled = true;
+                spinner.classList.remove('d-none');
+                btnText.textContent = '处理中...';
+                
+                // 隐藏结果和错误卡片
+                statusCard.classList.add('d-none');
+                resultCard.classList.add('d-none');
+                errorCard.classList.add('d-none');
+                
+                // 获取表单数据
+                const formData = new FormData();
+                const fileInput = document.getElementById('audioFile');
+                const languageInput = document.getElementById('language');
+                const userId = document.getElementById('userId').value;
+                const speakerDiarization = document.getElementById('speaker-diarization').checked;
+                
+                // 添加文件
+                if (!fileInput.files[0]) {
+                    showError('请选择音频文件');
+                    resetButtonState();
+                    return;
+                }
+                formData.append('file', fileInput.files[0]);
+                
+                // 准备额外参数
+                const uuid = generateUUID();
+                const fileName = fileInput.files[0].name;
+                const taskId = generateTaskId(fileName);
+                currentTaskId = taskId;
+                
+                const extraParams = {
+                    u_id: parseInt(userId),
+                    record_file_name: fileName,
+                    uuid: uuid,
+                    task_id: taskId,
+                    mode_id: 10001,
+                    language: languageInput.value,
+                    ai_mode: "GPT-4o",
+                    speaker: speakerDiarization
+                };
+                
+                // 将额外参数转换为JSON字符串
+                formData.append('extra_params', JSON.stringify(extraParams));
+                
+                // 发送请求
+                fetch('/api/uploadfile', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        return response.json().then(data => {
+                            throw new Error(data.message || '创建任务失败');
+                        });
+                    }
+                })
+                .then(data => {
+                    // 显示任务状态
+                    document.getElementById('task-id').textContent = data.task_id;
+                    document.getElementById('task-status').textContent = data.status;
+                    updateProgressBar(data.progress || 0);
+                    statusCard.classList.remove('d-none');
+                    
+                    // 如果任务已完成，获取结果
+                    if (data.status === 'completed') {
+                        fetchResult(data.task_id);
+                    }
+                })
+                .catch(error => {
+                    showError(error.message);
+                })
+                .finally(() => {
+                    resetButtonState();
+                });
+            });
+            
+            // 重置按钮状态
+            function resetButtonState() {
+                submitBtn.disabled = false;
+                spinner.classList.add('d-none');
+                btnText.textContent = '开始转写';
+            }
+            
+            // 更新进度条
+            function updateProgressBar(progress) {
+                const progressBar = document.getElementById('progress-bar');
+                progressBar.style.width = `${progress}%`;
+                progressBar.setAttribute('aria-valuenow', progress);
+                progressBar.textContent = `${progress}%`;
+            }
+            
+            // 检查任务状态
+            checkStatusBtn.addEventListener('click', function() {
+                if (!currentTaskId) return;
+                
+                fetch(`/api/task/${currentTaskId}`)
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('获取任务状态失败');
+                    }
+                })
+                .then(data => {
+                    document.getElementById('task-status').textContent = data.status;
+                    updateProgressBar(data.progress || 0);
+                    
+                    if (data.status === 'completed') {
+                        downloadResultBtn.classList.remove('d-none');
+                        fetchResult(data.task_id);
+                    } else {
+                        downloadResultBtn.classList.add('d-none');
+                    }
+                })
+                .catch(error => {
+                    showError(error.message);
+                });
+            });
+            
+            // 下载结果
+            downloadResultBtn.addEventListener('click', function() {
+                if (!currentTaskId) return;
+                
+                window.open(`/api/download/${currentTaskId}`, '_blank');
+            });
+            
+            // 获取结果
+            function fetchResult(taskId) {
+                fetch(`/api/download/${taskId}`)
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('获取结果失败');
+                    }
+                })
+                .then(data => {
+                    // 显示结果
+                    const resultText = document.getElementById('result-text');
+                    
+                    // 格式化输出结果
+                    let formattedResult = '';
+                    if (Array.isArray(data)) {
+                        // 如果结果是数组格式
+                        data.forEach(segment => {
+                            formattedResult += `[${segment.start} - ${segment.end}] ${segment.speaker}: ${segment.text}\n\n`;
+                        });
+                    } else if (data.segments) {
+                        // 如果结果包含segments字段
+                        data.segments.forEach(segment => {
+                            formattedResult += `[${segment.start} - ${segment.end}] ${segment.speaker || ''}: ${segment.text}\n\n`;
+                        });
+                    } else {
+                        // 直接显示文本
+                        formattedResult = data.text || JSON.stringify(data, null, 2);
+                    }
+                    
+                    resultText.textContent = formattedResult;
+                    resultCard.classList.remove('d-none');
+                    downloadResultBtn.classList.remove('d-none');
+                })
+                .catch(error => {
+                    console.error('Error fetching result:', error);
+                });
+            }
+            
+            // 重试按钮
+            retryBtn.addEventListener('click', function() {
+                errorCard.classList.add('d-none');
+                document.getElementById('audioFile').focus();
+            });
+        });
+    </script>
+</body>
+</html> 

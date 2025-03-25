@@ -37,6 +37,15 @@
                 
                 <div class="mb-3">
                     <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="speaker-diarization">
+                        <label class="form-check-label" for="speaker-diarization">
+                            启用说话人分离（多人对话推荐）
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="agree-terms" required>
                         <label class="form-check-label" for="agree-terms">
                             我已了解并同意转写服务条款
@@ -113,6 +122,11 @@
         return clientId;
     }
     
+    // 生成MD5哈希 (简化版)
+    function generateTaskId(str) {
+        return 'task_' + Math.random().toString(36).substring(2, 15);
+    }
+    
     // 初始化表单
     function initForm() {
         const uploadForm = document.getElementById('upload-form');
@@ -140,17 +154,38 @@
             const formData = new FormData();
             const fileInput = document.getElementById('audioFile');
             const languageInput = document.getElementById('language');
+            const speakerDiarization = document.getElementById('speaker-diarization').checked;
             
             // 添加文件
+            if (!fileInput.files[0]) {
+                showError("请选择音频文件");
+                return;
+            }
             formData.append('file', fileInput.files[0]);
             
-            // 添加语言（如果选择了）
-            if (languageInput.value) {
-                formData.append('language', languageInput.value);
-            }
+            // 准备额外参数对象
+            const clientId = getClientId();
+            const uuid = clientId;
+            const fileName = fileInput.files[0].name;
+            const taskId = generateTaskId(fileName);
+            const u_id = 111; // 默认用户ID
+            
+            const extraParams = {
+                u_id: u_id,
+                record_file_name: fileName,
+                uuid: uuid,
+                task_id: taskId,
+                mode_id: 10001, // 默认模式ID
+                language: languageInput.value || "auto",
+                ai_mode: "GPT-4o", // 默认AI模式
+                speaker: speakerDiarization
+            };
+            
+            // 将额外参数转换为JSON字符串并添加到表单
+            formData.append('extra_params', JSON.stringify(extraParams));
             
             // 发送请求
-            fetch('/api/uploadfile/', {
+            fetch('/api/uploadfile', {
                 method: 'POST',
                 body: formData
             })
@@ -159,7 +194,7 @@
                     return response.json();
                 } else {
                     return response.json().then(data => {
-                        throw new Error(data.detail || '创建任务失败');
+                        throw new Error(data.message || '创建任务失败');
                     });
                 }
             })
@@ -174,8 +209,7 @@
             })
             .catch(error => {
                 // 显示错误消息
-                document.getElementById('error-message').textContent = error.message;
-                errorCard.classList.remove('d-none');
+                showError(error.message);
             })
             .finally(() => {
                 // 重置按钮状态
@@ -191,6 +225,12 @@
                 }
             });
         });
+        
+        // 显示错误消息
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            errorCard.classList.remove('d-none');
+        }
         
         // 重试按钮
         retryBtn.addEventListener('click', function() {

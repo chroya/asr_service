@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.db.database import get_db
-from app.models.api_models import TranscriptionCreate, TranscriptionResponse, TranscriptionStatus, TranscriptionResult
+from app.models.api_models import TranscriptionStatus
 from app.models.models import Transcription
 from app.core.config import settings
 from app.services.transcription_service import TranscriptionService

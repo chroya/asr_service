@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 from dotenv import load_dotenv
+from fastapi.responses import RedirectResponse
 
 from app.api.routes import router as api_router
 from app.api.routes.web import router as web_router
@@ -53,7 +54,11 @@ def create_app() -> FastAPI:
     
     @app.get("/")
     async def root():
-        return {"message": "欢迎使用语音转写服务，请访问 /web 使用Web界面或 /api/docs 查看API文档"}
+        return {"message": "欢迎使用语音转写服务，请访问 /api/docs 查看API文档，或 /demo 使用演示页面"}
+    
+    @app.get("/demo", response_class=RedirectResponse)
+    async def demo():
+        return "/static/upload_demo.html"
     
     return app
 

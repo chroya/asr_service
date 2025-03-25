@@ -2,7 +2,6 @@ import logging
 from sqlalchemy.orm import Session
 from app.db.database import Base, engine
 from app.models.models import User, Transcription
-from app.services.user_service import create_user
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,6 @@ def init_db(db: Session) -> None:
             "limit_count": 100,
             "limit_duration": 3600
         }
-        create_user(db, user_in)
 
 def reset_db() -> None:
     """

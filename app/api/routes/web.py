@@ -7,7 +7,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 router = APIRouter()
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse)
 async def web_index(request: Request):
     """
     Web界面首页

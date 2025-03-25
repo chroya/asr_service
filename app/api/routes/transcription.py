@@ -189,81 +189,10 @@ async def get_task(task_id: str, request: Request, response: Response):
         return error_response
     
     # 获取客户端ID
-    client_id = request.headers.get("X-Client-ID", task.client_id)
+    client_id = task.client_id
     
     # 添加速率限制信息到响应头
     add_rate_limit_headers(response, client_id)
-    
-    return task
-
-@router.delete("/task/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_task(task_id: str, request: Request, response: Response):
-    """
-    删除转写任务
-    """
-    task = transcription_service.get_task(task_id)
-    if not task:
-        error_response = {
-            "task_id": task_id,
-            "status": "failed",
-            "code": ERROR_TASK_NOT_FOUND,
-            "message": ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
-        }
-        return Response(
-            content=json.dumps(error_response, ensure_ascii=False),
-            media_type="application/json",
-            status_code=status.HTTP_404_NOT_FOUND
-        )
-    
-    # 获取客户端ID
-    client_id = request.headers.get("X-Client-ID", task.client_id)
-    
-    # 添加速率限制信息到响应头
-    add_rate_limit_headers(response, client_id)
-    
-    transcription_service.delete_task(task_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-@router.post("/retry/{task_id}", response_model=TranscriptionTask)
-async def retry_task(
-    task_id: str,
-    background_tasks: BackgroundTasks,
-    request: Request,
-    response: Response
-):
-    """
-    重试失败的转写任务
-    """
-    task = transcription_service.get_task(task_id)
-    if not task:
-        error_response = TranscriptionTask(
-            task_id=task_id,
-            client_id="unknown",
-            status="failed",
-            filename="",
-            file_path="",
-            created_at=datetime.now().isoformat(),
-            code=ERROR_TASK_NOT_FOUND,
-            message=ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
-        )
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return error_response
-    
-    # 获取客户端ID（从请求头）
-    client_id = request.headers.get("X-Client-ID", task.client_id)
-    
-    # 添加速率限制信息到响应头
-    add_rate_limit_headers(response, client_id)
-    
-    # 重置任务状态
-    task = transcription_service.reset_task(task_id)
-    
-    # 将任务添加到后台处理队列
-    background_tasks.add_task(
-        transcription_service.process_task,
-        task_id,
-        on_complete=lambda duration: cloud_stats_service.report_task_completion(client_id, duration)
-    )
     
     return task
 
@@ -303,17 +232,6 @@ async def download_result_file(task_id: str, request: Request, response: Respons
         }
     )
 
-@router.get("/client/{client_id}/tasks", response_model=List[TranscriptionTask])
-async def get_client_tasks(client_id: str, request: Request, response: Response, limit: int = 10, offset: int = 0):
-    """
-    获取指定客户端的所有转写任务
-    """
-    # 添加速率限制信息到响应头
-    add_rate_limit_headers(response, client_id)
-    
-    tasks = transcription_service.get_client_tasks(client_id, limit, offset)
-    return tasks
-
 @router.get("/tasks", response_model=List[TranscriptionStatus])
 async def list_transcriptions(
     db: Session = Depends(get_db),
@@ -332,41 +250,3 @@ async def list_transcriptions(
     transcriptions = query.order_by(Transcription.created_at.desc()).offset(offset).limit(limit).all()
     
     return transcriptions
-
-@router.delete("/task/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_transcription(
-    task_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    删除转写任务
-    """
-    transcription = db.query(Transcription).filter(
-        Transcription.task_id == task_id
-    ).first()
-    
-    if not transcription:
-        error_response = {
-            "task_id": task_id,
-            "status": "failed",
-            "code": ERROR_TASK_NOT_FOUND,
-            "message": ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
-        }
-        return Response(
-            content=json.dumps(error_response, ensure_ascii=False),
-            media_type="application/json",
-            status_code=status.HTTP_404_NOT_FOUND
-        )
-    
-    # 删除相关文件
-    if transcription.file_path and os.path.exists(transcription.file_path):
-        os.remove(transcription.file_path)
-    
-    if transcription.transcription_path and os.path.exists(transcription.transcription_path):
-        os.remove(transcription.transcription_path)
-    
-    # 从数据库中删除
-    db.delete(transcription)
-    db.commit()
-    
-    return None

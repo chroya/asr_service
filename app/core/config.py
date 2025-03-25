@@ -11,9 +11,11 @@ class Settings():
     # 基础设置
     APP_NAME: str = os.getenv("APP_NAME", "ASR Service")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key_change_in_production")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    
+    # 移除用户认证相关密钥
+    # SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key_change_in_production")
+    # ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    # ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
     WHISPER_MODEL_NAME: str = os.getenv("WHISPER_MODEL_NAME", "")
@@ -36,11 +38,6 @@ class Settings():
     REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD", None)
     
     # MQTT设置
-    # MQTT_BROKER: str = "broker.emqx.io"
-    # MQTT_PORT: int = 1883
-    # MQTT_USERNAME: str = ""
-    # MQTT_PASSWORD: str = ""
-
     MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service_111")
     MQTT_BROKER: str = "s55f779f.ala.cn-hangzhou.emqxsl.cn"
     MQTT_PORT: int = 8883
@@ -53,7 +50,7 @@ class Settings():
     TRANSCRIPTION_DIR: str = os.getenv("TRANSCRIPTION_DIR", "./transcriptions")
     MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "250000000"))  # 默认250MB
     
-    # 用户限制设置
+    # 用户限制设置 - 仅保留用于控制u_id限额的设置
     DEFAULT_USER_LIMIT_COUNT: int = int(os.getenv("DEFAULT_USER_LIMIT_COUNT", "10"))
     DEFAULT_USER_LIMIT_DURATION: int = int(os.getenv("DEFAULT_USER_LIMIT_DURATION", "600"))  # 单位：秒
 

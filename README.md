@@ -1,14 +1,12 @@
 # 语音转写服务 (ASR Service)
 
-基于FastAPI和WhisperX的语音转写服务，提供Web界面和API接口，支持音频转文本功能。
+基于FastAPI和WhisperX的语音转写服务，提供API接口，支持音频转文本功能。
 
 ## 功能特点
 
 - 🔊 **多语言支持**: 支持多种语言的转写，包括中文、英语等多种语言
 - ⚡ **高效处理**: 采用先进的WhisperX技术，提供高效的音频转写
-- 🔒 **用户管理**: 完整的用户注册、登录和权限控制系统
-- 📊 **使用统计**: 跟踪用户转写次数和处理时长，支持使用限制
-- 📱 **响应式界面**: 友好的Web界面，支持桌面和移动设备
+- 📊 **使用统计**: 通过u_id跟踪用户转写使用情况，支持使用限制
 - 🔄 **实时状态更新**: 任务创建、处理和完成的实时更新通知
 - 📄 **结果导出**: 支持下载转写结果，包含时间戳信息
 
@@ -18,8 +16,7 @@
 - **音频处理**: WhisperX (基于OpenAI的Whisper模型)
 - **存储**: SQLite (可扩展到PostgreSQL等)
 - **消息队列**: Redis, MQTT
-- **前端**: HTML, CSS, JavaScript, Bootstrap 5
-- **模板**: Jinja2
+- **日志**: 按小时自动滚动的日志系统
 
 ## 安装指南
 
@@ -81,33 +78,16 @@ uvicorn app.main:app --reload
 
 ## 使用指南
 
-### 访问Web界面
-
-打开浏览器访问 http://localhost:8000/web 即可使用Web界面：
-
-- 首页: `/web`
-- 用户仪表板: `/web/dashboard`
-- 转写界面: `/web/transcribe`
-- 任务详情: `/web/task/{task_id}`
-
 ### API接口
 
 API接口文档可以通过访问 http://localhost:8000/api/docs 获取。主要接口包括：
-
-- 认证: `/api/auth/`
-  - 注册: `POST /api/auth/register`
-  - 登录: `POST /api/auth/token`
-  - 用户信息: `GET /api/auth/me`
   
 - 转写: `/api/uploadfile`
   - 创建转写任务: `POST /api/uploadfile`
   - 获取任务状态: `GET /api/task/{task_id}`
+  - 获取转写结果: `GET /api/download/{task_id}`
   - 获取任务列表: `GET /api/tasks`
   - 删除任务: `DELETE /api/task/{task_id}`
-
-- 用户: `/api/users/`
-  - 获取用户信息: `GET /api/users/me`
-  - 获取用户限制: `GET /api/users/me/limits`
 
 #### 示例：创建转写任务
 
@@ -204,6 +184,7 @@ asr_service/
 │   └── main.py               # 应用入口
 ├── uploads/                  # 上传文件目录
 ├── transcriptions/           # 转写结果目录
+├── logs/                     # 日志目录
 ├── .env.example              # 环境变量示例
 ├── requirements.txt          # 依赖项
 └── README.md                 # 项目说明

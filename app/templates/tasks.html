@@ -127,7 +127,7 @@
         
         tasksListEl.innerHTML = '<tr><td colspan="6" class="text-center">加载中...</td></tr>';
         
-        let url = `/api/uploadfile/?offset=${offset}&limit=${limit}`;
+        let url = `/api/tasks/?offset=${offset}&limit=${limit}`;
         if (showMyTasks) {
             const clientId = getClientId();
             url += `&client_id=${clientId}`;

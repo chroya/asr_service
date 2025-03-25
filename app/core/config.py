@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     # 文件下载设置
     BASE_URL: str = os.getenv("BASE_URL", "http://150.109.15.121:8000")
-    DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/transcription/download")
+    DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/uploadfile/download")
 
     class Config:
         env_file = ".env"

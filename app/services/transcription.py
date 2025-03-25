@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.whisperx import WhisperXProcessor
 from app.utils.storage import RedisStorage
 from app.schemas.transcription import TranscriptionTask
+from app.services.mqtt_service import mqtt_service
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class TranscriptionService:
         self, 
         task_id: str, 
         file_path: str, 
+        result_path: str,
         original_filename: str,
         client_id: str,
         language: Optional[str] = None
@@ -47,6 +49,7 @@ class TranscriptionService:
         Args:
             task_id: 任务ID
             file_path: 音频文件路径
+            result_path: 结果文件路径
             original_filename: 原始文件名
             client_id: 客户端ID
             language: 音频语言代码（可选）
@@ -61,6 +64,7 @@ class TranscriptionService:
             status="pending",
             filename=original_filename,
             file_path=file_path,
+            result_path=result_path,
             language=language,
             created_at=datetime.now().isoformat()
         )
@@ -243,6 +247,7 @@ class TranscriptionService:
             start_time = time.time()
             result, audio_duration = await self.processor.process_audio(
                 task.file_path,
+                task.result_path,
                 task_id=task_id,
                 language=task.language,
                 callback=lambda p, m: self._update_progress(task_id, p, m)
@@ -262,6 +267,12 @@ class TranscriptionService:
                 processing_time=processing_time,
                 result=result
             )
+            
+            # 构建结果文件路径和文件名
+            result_filename = f"{task_id}.json"
+            
+            # 发送MQTT消息通知
+            mqtt_service.send_transcription_complete(task_id, result_filename)
             
             # 调用完成回调
             if on_complete:

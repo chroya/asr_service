@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD", None)
     
     # MQTT设置
-    MQTT_BROKER: str = os.getenv("MQTT_BROKER", "localhost")
-    MQTT_PORT: int = int(os.getenv("MQTT_PORT", "1883"))
+    MQTT_BROKER: str = "broker.emqx.io"
+    MQTT_PORT: int = 1883
     MQTT_CLIENT_ID: str = os.getenv("MQTT_CLIENT_ID", "asr_service")
-    MQTT_USERNAME: Optional[str] = os.getenv("MQTT_USERNAME", None)
-    MQTT_PASSWORD: Optional[str] = os.getenv("MQTT_PASSWORD", None)
+    MQTT_USERNAME: str = ""
+    MQTT_PASSWORD: str = ""
     
     # 文件上传设置
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # 云端API设置
     CLOUD_STATS_API_URL: Optional[str] = os.getenv("CLOUD_STATS_API_URL")
     CLOUD_API_KEY: Optional[str] = os.getenv("CLOUD_API_KEY")
+
+    # 文件下载设置
+    BASE_URL: str = os.getenv("BASE_URL", "http://localhost:8000")
+    DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/transcription/download")
 
     class Config:
         env_file = ".env"

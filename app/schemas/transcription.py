@@ -27,6 +27,7 @@ class TranscriptionTask(BaseModel):
     status: str = Field(..., description="任务状态：pending, processing, completed, failed")
     filename: str = Field(..., description="原始文件名")
     file_path: str = Field(..., description="文件存储路径")
+    result_path: str = Field(..., description="结果文件存储路径")
     language: Optional[str] = Field(None, description="指定的语言（如未指定则为自动检测）")
     created_at: str = Field(..., description="创建时间")
     started_at: Optional[str] = Field(None, description="开始处理时间")
@@ -46,6 +47,7 @@ class TranscriptionTask(BaseModel):
                 "status": "completed",
                 "filename": "meeting.mp3",
                 "file_path": "/uploads/123e4567-e89b-12d3-a456-426614174000.mp3",
+                "result_path": "/transcriptions/123e4567-e89b-12d3-a456-426614174000.json",
                 "language": "zh",
                 "created_at": "2023-06-15T10:30:00",
                 "started_at": "2023-06-15T10:30:05",

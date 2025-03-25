@@ -30,6 +30,7 @@ class WhisperXProcessor:
     async def process_audio(
         self, 
         file_path: str, 
+        result_path: str,
         task_id: str,
         language: Optional[str] = None,
         callback: Optional[Callable[[int, str], None]] = None
@@ -53,9 +54,6 @@ class WhisperXProcessor:
             callback(10, "正在加载模型...")
         
         try:
-            # 加载音频
-            result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}.json")
-            
             # 步骤1: 加载模型并转写
             if callback:
                 callback(20, "正在转写音频...")
@@ -175,19 +173,11 @@ class WhisperXProcessor:
         """
         if model_size not in self.model_cache:
             logger.info(f"加载WhisperX模型: {model_size}")
-            asr_options = {
-                "multilingual": True,
-                "max_new_tokens": 512,
-                "clip_timestamps": 60,
-                "hallucination_silence_threshold": 0.5,
-                "hotwords": None
-            }
             
             self.model_cache[model_size] = whisperx.load_model(
                 model_size,
                 device=DEVICE,
-                compute_type="float16" if DEVICE == "cuda" else "float32",
-                # asr_options=asr_options
+                compute_type="float16" if DEVICE == "cuda" else "float32"
             )
         
         return self.model_cache[model_size]

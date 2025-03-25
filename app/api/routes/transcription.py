@@ -55,11 +55,14 @@ async def create_transcription_task(
     filename = file.filename
     task_id = str(uuid.uuid4())
     file_path = await save_upload_file(file, task_id)
+    # 创建结果文件路径
+    result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}.json")
     
     # 创建任务
     task = transcription_service.create_task(
         task_id=task_id,
         file_path=file_path,
+        result_path=result_path,
         original_filename=filename,
         client_id=client_id,
         language=language
@@ -167,7 +170,36 @@ async def download_task_result(task_id: str):
         content=result_json,
         media_type="application/json",
         headers={
-            "Content-Disposition": f'attachment; filename="transcription_{task_id}.json"'
+            "Content-Disposition": f'attachment; filename="{task_id}.json"'
+        }
+    )
+
+@router.get("/download/{task_id}", response_class=Response)
+async def download_result_file(task_id: str):
+    """
+    通过任务ID和文件名下载转写结果文件
+    """
+    filename = f"{task_id}.json"
+    # 构建文件路径
+    file_path = os.path.join(settings.TRANSCRIPTION_DIR, filename)
+    
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文件不存在"
+        )
+    
+    # 读取文件内容
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    
+    # 返回响应
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
         }
     )
 

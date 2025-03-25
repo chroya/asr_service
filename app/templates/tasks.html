@@ -127,7 +127,7 @@
         
         tasksListEl.innerHTML = '<tr><td colspan="6" class="text-center">加载中...</td></tr>';
         
-        let url = `/api/transcription/?offset=${offset}&limit=${limit}`;
+        let url = `/api/uploadfile/?offset=${offset}&limit=${limit}`;
         if (showMyTasks) {
             const clientId = getClientId();
             url += `&client_id=${clientId}`;
@@ -211,7 +211,7 @@
         new bootstrap.Modal(document.getElementById('resultModal')).show();
         
         // 获取结果
-        fetch(`/api/transcription/${taskId}/result`)
+        fetch(`/api/uploadfile/${taskId}/result`)
         .then(response => {
             if (response.ok) {
                 return response.json();
@@ -256,7 +256,7 @@
         
         showLoading();
         
-        fetch(`/api/transcription/${taskId}`, {
+        fetch(`/api/uploadfile/${taskId}`, {
             method: 'DELETE'
         })
         .then(response => {
@@ -287,7 +287,7 @@
     document.getElementById('download-result').addEventListener('click', function() {
         if (!currentTaskId) return;
         
-        fetch(`/api/transcription/${currentTaskId}/result`)
+        fetch(`/api/uploadfile/${currentTaskId}/result`)
         .then(response => response.json())
         .then(data => {
             // 创建文本内容
@@ -308,7 +308,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `transcription_${currentTaskId}.txt`;
+            a.download = `${currentTaskId}.txt`;
             a.click();
             URL.revokeObjectURL(url);
         })

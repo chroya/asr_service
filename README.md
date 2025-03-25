@@ -86,8 +86,6 @@ uvicorn app.main:app --reload
 打开浏览器访问 http://localhost:8000/web 即可使用Web界面：
 
 - 首页: `/web`
-- 登录: `/web/login`
-- 注册: `/web/register`
 - 用户仪表板: `/web/dashboard`
 - 转写界面: `/web/transcribe`
 - 任务详情: `/web/task/{task_id}`
@@ -101,12 +99,11 @@ API接口文档可以通过访问 http://localhost:8000/api/docs 获取。主要
   - 登录: `POST /api/auth/token`
   - 用户信息: `GET /api/auth/me`
   
-- 转写: `/api/uploadfile/`
-  - 创建转写任务: `POST /api/uploadfile/`
-  - 获取任务状态: `GET /api/uploadfile/{task_id}`
-  - 获取转写结果: `GET /api/uploadfile/{task_id}/result`
-  - 获取任务列表: `GET /api/uploadfile/`
-  - 删除任务: `DELETE /api/uploadfile/{task_id}`
+- 转写: `/api/uploadfile`
+  - 创建转写任务: `POST /api/uploadfile`
+  - 获取任务状态: `GET /api/task/{task_id}`
+  - 获取任务列表: `GET /api/tasks`
+  - 删除任务: `DELETE /api/task/{task_id}`
 
 - 用户: `/api/users/`
   - 获取用户信息: `GET /api/users/me`

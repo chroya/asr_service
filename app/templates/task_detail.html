@@ -132,7 +132,7 @@
         function loadTaskDetails(taskId) {
             showLoading();
             
-            fetch(`/api/transcription/${taskId}`)
+            fetch(`/api/uploadfile/${taskId}`)
                 .then(response => {
                     if (response.ok) {
                         return response.json();
@@ -323,7 +323,7 @@
         function downloadResults(taskId) {
             showLoading();
             
-            fetch(`/api/transcription/${taskId}/download`)
+            fetch(`/api/uploadfile/download/${taskId}`)
                 .then(response => {
                     if (response.ok) {
                         return response.blob();
@@ -339,7 +339,7 @@
                     const a = document.createElement('a');
                     a.style.display = 'none';
                     a.href = url;
-                    a.download = `transcription_${taskId}.json`;
+                    a.download = `uploadfile_${taskId}.json`;
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
@@ -362,7 +362,7 @@
             
             showLoading();
             
-            fetch(`/api/transcription/${taskId}/retry`, {
+            fetch(`/api/uploadfile/${taskId}/retry`, {
                 method: 'POST'
             })
                 .then(response => {
@@ -395,7 +395,7 @@
             
             showLoading();
             
-            fetch(`/api/transcription/${taskId}`, {
+            fetch(`/api/uploadfile/${taskId}`, {
                 method: 'DELETE'
             })
                 .then(response => {

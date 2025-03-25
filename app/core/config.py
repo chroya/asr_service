@@ -63,7 +63,7 @@ class Settings():
 
     # 文件下载设置
     BASE_URL: str = os.getenv("BASE_URL", "http://150.109.15.121:8000")
-    DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/uploadfile/download")
+    DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/download")
 
     WHISPER_MODEL_NAME="base"
 

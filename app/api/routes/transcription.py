@@ -47,7 +47,7 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
     #     if rate_limit_info.retry_after:
     #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
+@router.post("/uploadfile", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
 async def create_transcription_task(
     background_tasks: BackgroundTasks,
     request: Request,
@@ -168,7 +168,7 @@ async def create_transcription_task(
     
     return task
 
-@router.get("/{task_id}", response_model=TranscriptionTask)
+@router.get("/task/{task_id}", response_model=TranscriptionTask)
 async def get_task(task_id: str, request: Request, response: Response):
     """
     获取转写任务的状态和信息
@@ -196,7 +196,7 @@ async def get_task(task_id: str, request: Request, response: Response):
     
     return task
 
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/task/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(task_id: str, request: Request, response: Response):
     """
     删除转写任务
@@ -224,7 +224,7 @@ async def delete_task(task_id: str, request: Request, response: Response):
     transcription_service.delete_task(task_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-@router.post("/{task_id}/retry", response_model=TranscriptionTask)
+@router.post("/retry/{task_id}", response_model=TranscriptionTask)
 async def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
@@ -314,7 +314,7 @@ async def get_client_tasks(client_id: str, request: Request, response: Response,
     tasks = transcription_service.get_client_tasks(client_id, limit, offset)
     return tasks
 
-@router.get("/", response_model=List[TranscriptionStatus])
+@router.get("/tasks", response_model=List[TranscriptionStatus])
 async def list_transcriptions(
     db: Session = Depends(get_db),
     limit: int = 10,
@@ -333,7 +333,7 @@ async def list_transcriptions(
     
     return transcriptions
 
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/task/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_transcription(
     task_id: str,
     db: Session = Depends(get_db)

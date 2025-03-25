@@ -5,8 +5,8 @@ from app.api.routes import transcription, web
 router = APIRouter()
 
 # 包含其他路由
-router.include_router(transcription.router, prefix="/uploadfile", tags=["上传文件并转写"])
-router.include_router(web.router, prefix="/web", tags=["网页"])
+router.include_router(transcription.router)
+# router.include_router(web.router, prefix="/web", tags=["网页"])
 
 # 健康检查路由
 @router.get("/health", tags=["系统"])

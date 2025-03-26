@@ -4,6 +4,7 @@ import uuid
 import logging
 import time
 import shutil
+import asyncio
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 
@@ -355,4 +356,110 @@ class TranscriptionService:
         task_list = self.storage.get(f"client_task:{client_id}") or []
         if task_id in task_list:
             task_list.remove(task_id)
-            self.storage.save(f"client_task:{client_id}", task_list) 
+            self.storage.save(f"client_task:{client_id}", task_list)
+    
+    def process_task_sync(self, task_id: str) -> Dict[str, Any]:
+        """
+        同步处理转写任务（Celery任务使用）
+        
+        Args:
+            task_id: 任务ID
+            
+        Returns:
+            Dict[str, Any]: 处理结果的字典表示
+        """
+        # 获取任务信息
+        task = self.get_task(task_id)
+        if not task:
+            logger.error(f"任务不存在: {task_id}")
+            return {"status": "failed", "error": "任务不存在"}
+        
+        # 检查文件是否存在
+        if not os.path.exists(task.file_path):
+            self.update_task(
+                task_id,
+                status="failed",
+                error_message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND],
+                code=ERROR_FILE_NOT_FOUND,
+                message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND]
+            )
+            logger.error(f"任务音频文件不存在: {task.file_path}")
+            return {"status": "failed", "error": "文件不存在"}
+        
+        try:
+            # 更新任务状态为处理中
+            self.update_task(
+                task_id,
+                status="processing",
+                started_at=datetime.now().isoformat()
+            )
+            
+            # 获取额外参数
+            language = task.language
+            speaker_diarization = task.extra_params.speaker if task.extra_params else False
+            
+            if task.extra_params and 'language' in task.extra_params:
+                language = task.extra_params.get('language')
+                
+            if task.extra_params and 'speaker' in task.extra_params:
+                speaker_diarization = task.extra_params.get('speaker', False)
+            
+            # 开始处理
+            start_time = time.time()
+            
+            # 创建一个事件循环来运行异步任务
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result, audio_duration = loop.run_until_complete(
+                    self.processor.process_audio(
+                        task.file_path,
+                        task.result_path,
+                        task_id,
+                        language=language if language != "auto" else None,
+                        speaker_diarization=speaker_diarization,
+                        callback=lambda progress, message: self._update_progress(task_id, progress, message)
+                    )
+                )
+            finally:
+                loop.close()
+            
+            # 计算处理时间
+            processing_time = time.time() - start_time
+            
+            # 更新任务状态和结果
+            self.update_task(
+                task_id,
+                status="completed",
+                result=result,
+                completed_at=datetime.now().isoformat(),
+                audio_duration=audio_duration,
+                processing_time=processing_time,
+                progress=100,
+                progress_message="处理完成",
+                code=SUCCESS,  # 成功状态码
+                message=get_error_message(SUCCESS)  # 成功状态消息为空
+            )
+            
+            # 发送MQTT通知
+            mqtt_service.send_transcription_complete(task_id)
+            
+            return {
+                "status": "completed",
+                "audio_duration": audio_duration,
+                "result": result
+            }
+                
+        except Exception as e:
+            # 更新任务状态为失败
+            error_message = str(e)
+            self.update_task(
+                task_id,
+                status="failed",
+                error_message=error_message,
+                completed_at=datetime.now().isoformat(),
+                code=ERROR_PROCESSING_FAILED,
+                message=get_error_message(ERROR_PROCESSING_FAILED, f"处理失败: {error_message}")
+            )
+            logger.exception(f"处理任务失败: {task_id} - {error_message}")
+            return {"status": "failed", "error": error_message} 

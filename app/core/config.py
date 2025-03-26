@@ -28,9 +28,6 @@ class Settings():
     LOG_BACKUP_COUNT: int = int(os.getenv("LOG_BACKUP_COUNT", "72"))  # 3天
     LOG_CONSOLE_OUTPUT: bool = os.getenv("LOG_CONSOLE_OUTPUT", "True").lower() in ("true", "1", "t")
     
-    # 数据库设置
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./asr_service.db")
-    
     # Redis设置
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))

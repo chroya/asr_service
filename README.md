@@ -1,6 +1,6 @@
 # 语音转写服务 (ASR Service)
 
-基于FastAPI和WhisperX的语音转写服务，提供API接口，支持音频转文本功能。
+基于FastAPI、Celery和WhisperX的语音转写服务，提供API接口，支持音频转文本功能。
 
 ## 功能特点
 
@@ -9,6 +9,7 @@
 - 📊 **使用统计**: 通过u_id跟踪用户转写使用情况，支持使用限制
 - 🔄 **实时状态更新**: 任务创建、处理和完成的实时更新通知
 - 📄 **结果导出**: 支持下载转写结果，包含时间戳信息
+- 🚀 **分布式处理**: 使用Celery任务队列进行分布式音频转写处理
 
 ## 技术栈
 
@@ -16,6 +17,7 @@
 - **音频处理**: WhisperX (基于OpenAI的Whisper模型)
 - **存储**: SQLite (可扩展到PostgreSQL等)
 - **消息队列**: Redis, MQTT
+- **任务队列**: Celery, Flower (任务监控)
 - **日志**: 按小时自动滚动的日志系统
 
 ## 安装指南
@@ -23,7 +25,7 @@
 ### 前置条件
 
 - Python 3.8+
-- Redis服务器
+- Redis服务器（用于Celery和数据存储）
   redis服务本地部署：
   ```bash
      sudo apt install redis-server
@@ -73,7 +75,16 @@ python -m app.db.init_db
 7. 启动服务
 
 ```bash
+# 启动FastAPI服务
 uvicorn app.main:app --reload
+
+# 在另一个终端中启动Celery Worker
+python celery_worker.py
+
+# 可选：启动Flower监控（在另一个终端）
+python celery_flower.py
+# 或直接使用命令
+# celery -A app.core.celery.celery_app flower --port=5555
 ```
 
 ## 使用指南
@@ -96,6 +107,7 @@ API接口文档可以通过访问 http://localhost:8000/api/docs 获取。主要
 
 - 简易演示页面：访问 http://localhost:8000/demo 获取简单的文件上传演示
 - 完整Web界面：访问 http://localhost:8000/web/ 获取完整的用户界面体验
+- Celery任务监控：访问 http://localhost:5555 查看任务队列监控
 
 #### 示例：创建转写任务
 
@@ -182,18 +194,22 @@ server {
 asr_service/
 ├── app/                      # 应用程序包
 │   ├── core/                 # 核心模块
+│   │   ├── celery.py         # Celery配置
 │   ├── models/               # 数据模型
 │   ├── routes/               # 路由模块
 │   │   ├── api/              # API路由
 │   │   └── web/              # Web界面路由
 │   ├── services/             # 服务层
 │   ├── static/               # 静态文件
+│   ├── tasks/                # Celery任务
 │   ├── templates/            # 模板文件
 │   ├── utils/                # 工具类
 │   └── main.py               # 应用入口
 ├── uploads/                  # 上传文件目录
 ├── transcriptions/           # 转写结果目录
 ├── logs/                     # 日志目录
+├── celery_worker.py          # Celery Worker启动脚本
+├── celery_flower.py          # Celery Flower监控启动脚本
 ├── .env.example              # 环境变量示例
 ├── requirements.txt          # 依赖项
 └── README.md                 # 项目说明

@@ -1,5 +1,5 @@
 uploads/*
-__pycache__/*
+__pycache__
 *.pyc
 transcriptions/*
 logs/*

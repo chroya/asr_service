@@ -62,8 +62,12 @@ class WhisperXProcessor:
             if callback:
                 callback(20, "正在转写音频...")
             
+            logger.info(f"加载whisper模型: {settings.WHISPER_MODEL_NAME}")
             # 加载whisper模型
             model = self._get_model(settings.WHISPER_MODEL_NAME)
+            
+
+            logger.info(f"开始转写...")
             
             # 转写音频，如果指定了语言则传入
             transcription = model.transcribe(
@@ -71,6 +75,8 @@ class WhisperXProcessor:
                 batch_size=16,
                 language=language,
             )
+
+            logger.info(f"转写完成...")
             
             # 提取检测到的语言
             detected_language = transcription.get("language", language)

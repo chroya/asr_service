@@ -2,7 +2,7 @@ import os
 import json
 import shutil
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, status, Request, Response
+from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -19,6 +19,7 @@ from app.utils.error_codes import (
     ERROR_MESSAGES, get_error_message
 )
 from app.schemas.transcription import TranscriptionTask, RateLimitInfo, TranscriptionExtraParams
+from app.tasks.transcription_tasks import process_transcription
 
 router = APIRouter()
 
@@ -47,7 +48,6 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
 
 @router.post("/uploadfile", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
 async def create_transcription_task(
-    background_tasks: BackgroundTasks,
     request: Request,
     response: Response,
     file: UploadFile = File(...),
@@ -155,12 +155,8 @@ async def create_transcription_task(
         speaker=speaker
     )
     
-    # 将任务添加到后台处理队列
-    background_tasks.add_task(
-        transcription_service.process_task,
-        task_id,
-        on_complete=lambda duration: cloud_stats_service.report_task_completion(client_id, duration)
-    )
+    # 将任务添加到Celery队列
+    process_transcription.delay(task_id)
     
     # 添加速率限制信息到响应头
     add_rate_limit_headers(response, client_id)

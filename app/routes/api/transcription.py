@@ -2,14 +2,12 @@ import os
 import json
 import shutil
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, status, Request, Response
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, status, Request, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 
-from app.db.database import get_db
 from app.models.api_models import TranscriptionStatus
-from app.models.models import Transcription
 from app.core.config import settings
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
@@ -79,7 +77,8 @@ async def create_transcription_task(
         # 提取参数
         u_id = params.get("u_id")
         task_id = params.get("task_id")
-        language = params.get("language", "auto")
+        # language = params.get("language", "auto")
+        language = "auto"  # 先忽略传上来的参数，默认自动检测语言
         uuid_str = params.get("uuid")
         mode_id = params.get("mode_id")
         ai_mode = params.get("ai_mode")
@@ -234,19 +233,16 @@ async def download_result_file(task_id: str, request: Request, response: Respons
 
 @router.get("/tasks", response_model=List[TranscriptionStatus])
 async def list_transcriptions(
-    db: Session = Depends(get_db),
     limit: int = 10,
     offset: int = 0,
-    client_id: Optional[str] = None
+    client_id: Optional[str] = ''
 ):
     """
     列出转写任务，可选按客户端ID过滤
     """
-    query = db.query(Transcription)
-    
-    if client_id:
-        query = query.filter(Transcription.client_id == client_id)
-    
-    transcriptions = query.order_by(Transcription.created_at.desc()).offset(offset).limit(limit).all()
-    
-    return transcriptions
+    tasks = transcription_service.get_client_tasks(client_id, limit, offset)
+
+    return [
+        TranscriptionStatus(**task.dict())
+        for task in tasks
+    ]

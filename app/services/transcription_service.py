@@ -196,7 +196,7 @@ class TranscriptionService:
             List[TranscriptionTask]: 任务列表
         """
         # 获取客户端的任务ID列表
-        task_ids = self.storage.get(f"client:{client_id}:tasks") or []
+        task_ids = self.storage.get(f"client_task:{client_id}") or []
         
         # 分页
         task_ids = task_ids[offset:offset + limit]
@@ -345,14 +345,14 @@ class TranscriptionService:
     
     def _add_to_client_tasks(self, client_id: str, task_id: str) -> None:
         """将任务添加到客户端任务列表"""
-        task_list = self.storage.get(f"client:{client_id}:tasks") or []
+        task_list = self.storage.get(f"client_task:{client_id}") or []
         if task_id not in task_list:
             task_list.append(task_id)
-            self.storage.save(f"client:{client_id}:tasks", task_list)
+            self.storage.save(f"client_task:{client_id}", task_list)
     
     def _remove_from_client_tasks(self, client_id: str, task_id: str) -> None:
         """从客户端任务列表中移除任务"""
-        task_list = self.storage.get(f"client:{client_id}:tasks") or []
+        task_list = self.storage.get(f"client_task:{client_id}") or []
         if task_id in task_list:
             task_list.remove(task_id)
-            self.storage.save(f"client:{client_id}:tasks", task_list) 
+            self.storage.save(f"client_task:{client_id}", task_list) 

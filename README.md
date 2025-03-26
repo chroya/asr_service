@@ -82,12 +82,20 @@ uvicorn app.main:app --reload
 
 API接口文档可以通过访问 http://localhost:8000/api/docs 获取。主要接口包括：
   
-- 转写: `/api/uploadfile`
+- 转写接口:
   - 创建转写任务: `POST /api/uploadfile`
   - 获取任务状态: `GET /api/task/{task_id}`
   - 获取转写结果: `GET /api/download/{task_id}`
   - 获取任务列表: `GET /api/tasks`
-  - 删除任务: `DELETE /api/task/{task_id}`
+- 系统接口:
+  - 健康检查: `GET /api/health`
+
+### 演示页面
+
+系统提供了两种界面用于测试和使用转写功能：
+
+- 简易演示页面：访问 http://localhost:8000/demo 获取简单的文件上传演示
+- 完整Web界面：访问 http://localhost:8000/web/ 获取完整的用户界面体验
 
 #### 示例：创建转写任务
 
@@ -173,14 +181,15 @@ server {
 ```
 asr_service/
 ├── app/                      # 应用程序包
-│   ├── api/                  # API模块
-│   │   └── routes/           # API路由
 │   ├── core/                 # 核心模块
-│   ├── db/                   # 数据库模块
 │   ├── models/               # 数据模型
+│   ├── routes/               # 路由模块
+│   │   ├── api/              # API路由
+│   │   └── web/              # Web界面路由
 │   ├── services/             # 服务层
 │   ├── static/               # 静态文件
 │   ├── templates/            # 模板文件
+│   ├── utils/                # 工具类
 │   └── main.py               # 应用入口
 ├── uploads/                  # 上传文件目录
 ├── transcriptions/           # 转写结果目录

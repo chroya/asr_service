@@ -132,7 +132,7 @@
         function loadTaskDetails(taskId) {
             showLoading();
             
-            fetch(`/api/uploadfile/${taskId}`)
+            fetch(`/api/task/${taskId}`)
                 .then(response => {
                     if (response.ok) {
                         return response.json();
@@ -323,7 +323,7 @@
         function downloadResults(taskId) {
             showLoading();
             
-            fetch(`/api/uploadfile/download/${taskId}`)
+            fetch(`/api/download/${taskId}`)
                 .then(response => {
                     if (response.ok) {
                         return response.blob();
@@ -362,7 +362,7 @@
             
             showLoading();
             
-            fetch(`/api/uploadfile/${taskId}/retry`, {
+            fetch(`/api/${taskId}/retry`, {
                 method: 'POST'
             })
                 .then(response => {
@@ -395,7 +395,7 @@
             
             showLoading();
             
-            fetch(`/api/uploadfile/${taskId}`, {
+            fetch(`/api/${taskId}`, {
                 method: 'DELETE'
             })
                 .then(response => {

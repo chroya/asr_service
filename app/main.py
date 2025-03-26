@@ -6,8 +6,7 @@ import logging
 from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse
 
-from app.api.routes import router as api_router
-from app.api.routes.web import router as web_router
+from app.routes import api_app_router, web_app_router
 from app.core.config import settings
 from app.utils.logging_config import setup_logging
 
@@ -49,8 +48,8 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     
     # 挂载API路由
-    app.include_router(api_router, prefix="/api", tags=["API"])
-    app.include_router(web_router, prefix="/web", tags=["网页"])
+    app.include_router(api_app_router, prefix="/api", tags=["API"])
+    app.include_router(web_app_router, prefix="/web", tags=["网页"])
     
     @app.get("/")
     async def root():

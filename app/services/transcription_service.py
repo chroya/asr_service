@@ -19,6 +19,7 @@ from app.utils.error_codes import (
 )
 from app.schemas.transcription import TranscriptionTask, TranscriptionExtraParams
 from app.services.mqtt_service import get_mqtt_service
+from app.services.webhook_service import get_webhook_service
 
 logger = logging.getLogger(__name__)
 
@@ -243,97 +244,98 @@ class TranscriptionService:
         
         return task
     
-    async def process_task(self, task_id: str, on_complete: Optional[Callable[[float], None]] = None) -> None:
-        """
-        处理转写任务
+    
+    # async def process_task(self, task_id: str, on_complete: Optional[Callable[[float], None]] = None) -> None:
+    #     """
+    #     处理转写任务
         
-        Args:
-            task_id: 任务ID
-            on_complete: 完成后的回调函数，接收音频时长参数
-        """
-        # 获取任务信息
-        task = self.get_task(task_id)
-        if not task:
-            logger.error(f"任务不存在: {task_id}")
-            return
+    #     Args:
+    #         task_id: 任务ID
+    #         on_complete: 完成后的回调函数，接收音频时长参数
+    #     """
+    #     # 获取任务信息
+    #     task = self.get_task(task_id)
+    #     if not task:
+    #         logger.error(f"任务不存在: {task_id}")
+    #         return
         
-        # 检查文件是否存在
-        if not os.path.exists(task.file_path):
-            self.update_task(
-                task_id,
-                status="failed",
-                error_message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND],
-                code=ERROR_FILE_NOT_FOUND,  # 设置错误码
-                message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND]  # 设置错误消息
-            )
-            logger.error(f"任务音频文件不存在: {task.file_path}")
-            return
+    #     # 检查文件是否存在
+    #     if not os.path.exists(task.file_path):
+    #         self.update_task(
+    #             task_id,
+    #             status="failed",
+    #             error_message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND],
+    #             code=ERROR_FILE_NOT_FOUND,  # 设置错误码
+    #             message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND]  # 设置错误消息
+    #         )
+    #         logger.error(f"任务音频文件不存在: {task.file_path}")
+    #         return
         
-        try:
-            # 更新任务状态为处理中
-            self.update_task(
-                task_id,
-                status="processing",
-                started_at=datetime.now().isoformat()
-            )
+    #     try:
+    #         # 更新任务状态为处理中
+    #         self.update_task(
+    #             task_id,
+    #             status="processing",
+    #             started_at=datetime.now().isoformat()
+    #         )
             
-            # 获取额外参数
-            language = task.language
-            speaker_diarization = task.extra_params.speaker if task.extra_params else False
+    #         # 获取额外参数
+    #         language = task.language
+    #         speaker_diarization = task.extra_params.speaker if task.extra_params else False
             
-            if task.extra_params and 'language' in task.extra_params:
-                language = task.extra_params.get('language')
+    #         if task.extra_params and 'language' in task.extra_params:
+    #             language = task.extra_params.get('language')
                 
-            if task.extra_params and 'speaker' in task.extra_params:
-                speaker_diarization = task.extra_params.get('speaker', False)
+    #         if task.extra_params and 'speaker' in task.extra_params:
+    #             speaker_diarization = task.extra_params.get('speaker', False)
             
-            # 开始处理
-            start_time = time.time()
-            result, audio_duration = await self.processor.process_audio(
-                task.file_path,
-                task.result_path,
-                task_id,
-                language=language if language != "auto" else None,
-                speaker_diarization=speaker_diarization,
-                callback=lambda progress, message: self._update_progress(task_id, progress, message)
-            )
+    #         # 开始处理
+    #         start_time = time.time()
+    #         result, audio_duration = await self.processor.process_audio(
+    #             task.file_path,
+    #             task.result_path,
+    #             task_id,
+    #             language=language if language != "auto" else None,
+    #             speaker_diarization=speaker_diarization,
+    #             callback=lambda progress, message: self._update_progress(task_id, progress, message)
+    #         )
             
-            # 计算处理时间
-            processing_time = time.time() - start_time
+    #         # 计算处理时间
+    #         processing_time = time.time() - start_time
             
-            # 更新任务状态和结果
-            self.update_task(
-                task_id,
-                status="completed",
-                result=result,
-                completed_at=datetime.now().isoformat(),
-                audio_duration=audio_duration,
-                processing_time=processing_time,
-                progress=100,
-                progress_message="处理完成",
-                code=SUCCESS,  # 成功状态码
-                message=get_error_message(SUCCESS)  # 成功状态消息为空
-            )
+    #         # 更新任务状态和结果
+    #         self.update_task(
+    #             task_id,
+    #             status="completed",
+    #             result=result,
+    #             completed_at=datetime.now().isoformat(),
+    #             audio_duration=audio_duration,
+    #             processing_time=processing_time,
+    #             progress=100,
+    #             progress_message="处理完成",
+    #             code=SUCCESS,  # 成功状态码
+    #             message=get_error_message(SUCCESS)  # 成功状态消息为空
+    #         )
             
-            # 发送MQTT通知
-            get_mqtt_service().send_transcription_complete(task_id)
+    #         # 发送MQTT通知
+    #         get_mqtt_service().send_transcription_complete(task_id)
             
-            # 如果有回调，调用回调函数
-            if on_complete:
-                on_complete(audio_duration)
+    #         # 如果有回调，调用回调函数
+    #         if on_complete:
+    #             on_complete(audio_duration)
                 
-        except Exception as e:
-            # 更新任务状态为失败
-            error_message = str(e)
-            self.update_task(
-                task_id,
-                status="failed",
-                error_message=error_message,
-                completed_at=datetime.now().isoformat(),
-                code=ERROR_PROCESSING_FAILED,  # 处理失败错误码
-                message=get_error_message(ERROR_PROCESSING_FAILED, f"处理失败: {error_message}")  # 错误消息
-            )
-            logger.exception(f"处理任务失败: {task_id} - {error_message}")
+    #     except Exception as e:
+    #         # 更新任务状态为失败
+    #         error_message = str(e)
+    #         self.update_task(
+    #             task_id,
+    #             status="failed",
+    #             error_message=error_message,
+    #             completed_at=datetime.now().isoformat(),
+    #             code=ERROR_PROCESSING_FAILED,  # 处理失败错误码
+    #             message=get_error_message(ERROR_PROCESSING_FAILED, f"处理失败: {error_message}")  # 错误消息
+    #         )
+    #         logger.exception(f"处理任务失败: {task_id} - {error_message}")
             
     
     def _update_progress(self, task_id: str, progress: int, message: str) -> None:
@@ -435,9 +437,21 @@ class TranscriptionService:
                 code=SUCCESS,  # 成功状态码
                 message=get_error_message(SUCCESS)  # 成功状态消息为空
             )
+
+            # 处理完成的log，包括音频时长、处理耗时
+            logger.info(f"Task {task_id} completed. Audio duration: {audio_duration} seconds, Processing time: {processing_time} seconds")
             
             # 发送MQTT通知
             get_mqtt_service().send_transcription_complete(task_id)
+            
+            # 发送Webhook通知
+            webhook_service = get_webhook_service()
+            webhook_service.send_transcription_complete(
+                extra_params=task.extra_params or {},
+                result=result,
+                duration=int(audio_duration),
+                use_time=int(processing_time)
+            )
             
             return {
                 "status": "completed",

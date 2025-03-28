@@ -82,6 +82,19 @@ class MQTTService:
                 return True
             else:
                 logger.error(f"MQTT消息发送失败: {result.rc}")
+                # 尝试重新连接并发送消息
+                try:
+                    self.client.reconnect()
+                    result = self.client.publish(get_topic(task_id), json.dumps(message))
+                    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                        logger.info(f"MQTT消息重新发送成功: {task_id}, 下载链接: {download_url}")
+                        return True
+                    else:
+                       logger.error(
+                           f"MQTT消息重新发送失败: {result.rc}"
+                       )
+                except Exception as e:
+                    logger.error(f"重新连接MQTT客户端时出错: {str(e)}")
                 return False
                 
         except Exception as e:

@@ -358,6 +358,9 @@ class TranscriptionService:
             task_list.remove(task_id)
             self.storage.save(f"client_task:{client_id}", task_list)
     
+    '''
+    同步方法，在celery中使用
+    '''
     def process_task_sync(self, task_id: str) -> Dict[str, Any]:
         """
         同步处理转写任务（Celery任务使用）
@@ -406,25 +409,15 @@ class TranscriptionService:
             
             # 开始处理
             start_time = time.time()
-            
-            # 创建一个事件循环来运行异步任务
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                # result, audio_duration = loop.run_until_complete(
-                #     self.processor.process_audio(
-                #         task.file_path,
-                #         task.result_path,
-                #         task_id,
-                #         language=language if language != "auto" else None,
-                #         speaker_diarization=speaker_diarization,
-                #         callback=lambda progress, message: self._update_progress(task_id, progress, message)
-                #     )
-                # )
-                result, audio_duration = "ok", 10
-                time.sleep(10)
-            finally:
-                loop.close()
+        
+            result, audio_duration = self.processor.process_audio(
+                    task.file_path,
+                    task.result_path,
+                    task_id,
+                    language=language if language != "auto" else None,
+                    speaker_diarization=speaker_diarization,
+                    callback=lambda progress, message: self._update_progress(task_id, progress, message)
+                )
             
             # 计算处理时间
             processing_time = time.time() - start_time

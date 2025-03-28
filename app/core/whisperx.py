@@ -28,7 +28,7 @@ class WhisperXProcessor:
         # 模型缓存
         self.model_cache = {}
     
-    async def process_audio(
+    def process_audio(
         self, 
         file_path: str, 
         result_path: str,

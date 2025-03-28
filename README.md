@@ -188,6 +188,53 @@ server {
 }
 ```
 
+### 使用Supervisor部署
+
+1. 安装supervisor:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install supervisor
+
+# CentOS
+sudo yum install supervisor
+
+# macOS
+brew install supervisor
+```
+
+2. 配置文件已准备好（supervisor_config.ini），包含以下服务：
+   - asr_api: FastAPI 服务
+   - asr_celery: Celery Worker
+   - asr_flower: Flower监控服务
+
+3. 启动supervisor服务：
+
+```bash
+# 启动supervisor
+supervisord -c supervisor_config.ini
+
+# 查看所有进程状态
+supervisorctl -c supervisor_config.ini status
+
+# 启动所有服务
+supervisorctl -c supervisor_config.ini start all
+
+# 重启所有服务
+supervisorctl -c supervisor_config.ini restart all
+
+# 停止所有服务
+supervisorctl -c supervisor_config.ini stop all
+
+# 也可以单独控制某个服务，例如：
+supervisorctl -c supervisor_config.ini restart asr_api
+```
+
+4. 查看日志：
+   - API服务日志：`logs/api.log` 和 `logs/api_error.log`
+   - Celery Worker日志：`logs/celery.log` 和 `logs/celery_error.log`
+   - Flower监控日志：`logs/flower.log` 和 `logs/flower_error.log`
+
 ## 项目结构
 
 ```

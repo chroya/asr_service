@@ -18,7 +18,7 @@ from app.utils.error_codes import (
     ERROR_MESSAGES, get_error_message
 )
 from app.schemas.transcription import TranscriptionTask, TranscriptionExtraParams
-from app.services.mqtt_service import mqtt_service
+from app.services.mqtt_service import get_mqtt_service
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,7 @@ class TranscriptionService:
             )
             
             # 发送MQTT通知
-            mqtt_service.send_transcription_complete(task_id)
+            get_mqtt_service().send_transcription_complete(task_id)
             
             # 如果有回调，调用回调函数
             if on_complete:
@@ -411,16 +411,18 @@ class TranscriptionService:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result, audio_duration = loop.run_until_complete(
-                    self.processor.process_audio(
-                        task.file_path,
-                        task.result_path,
-                        task_id,
-                        language=language if language != "auto" else None,
-                        speaker_diarization=speaker_diarization,
-                        callback=lambda progress, message: self._update_progress(task_id, progress, message)
-                    )
-                )
+                # result, audio_duration = loop.run_until_complete(
+                #     self.processor.process_audio(
+                #         task.file_path,
+                #         task.result_path,
+                #         task_id,
+                #         language=language if language != "auto" else None,
+                #         speaker_diarization=speaker_diarization,
+                #         callback=lambda progress, message: self._update_progress(task_id, progress, message)
+                #     )
+                # )
+                result, audio_duration = "ok", 10
+                time.sleep(10)
             finally:
                 loop.close()
             
@@ -442,7 +444,7 @@ class TranscriptionService:
             )
             
             # 发送MQTT通知
-            mqtt_service.send_transcription_complete(task_id)
+            get_mqtt_service().send_transcription_complete(task_id)
             
             return {
                 "status": "completed",

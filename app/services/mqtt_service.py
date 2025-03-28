@@ -7,33 +7,46 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# MQTT客户端实例
-mqtt_client = None
-
 class MQTTService:
     """MQTT服务，用于发送消息通知"""
+    _instance = None
+    _is_initialized = False
     
     def __init__(self):
         """初始化MQTT客户端"""
-        self.client = mqtt.Client()
-        
-        # 设置认证信息（如果有）
-        if settings.MQTT_USERNAME and settings.MQTT_PASSWORD:
-            self.client.username_pw_set(settings.MQTT_USERNAME, settings.MQTT_PASSWORD)
-            self.client.tls_set(ca_certs=settings.MQTT_CERT_PATH)
-        
-        # 设置回调
-        self.client.on_connect = self._on_connect
-        self.client.on_disconnect = self._on_disconnect
-        
-        # 连接MQTT broker
-        logger.info(f"Connecting to MQTT broker {settings.MQTT_BROKER}:{settings.MQTT_PORT}")
-        print(f"Connecting to MQTT broker {settings.MQTT_BROKER}:{settings.MQTT_PORT}")
-        try:
-            self.client.connect(settings.MQTT_BROKER, settings.MQTT_PORT)
-            self.client.loop_start()
-        except Exception as e:
-            logger.error(f"MQTT连接失败: {str(e)}")
+        if not MQTTService._is_initialized:
+            self.client = None
+            MQTTService._is_initialized = True
+    
+    @classmethod
+    def get_instance(cls):
+        """获取单例实例"""
+        if cls._instance is None:
+            cls._instance = MQTTService()
+        return cls._instance
+    
+    def _ensure_connected(self):
+        """确保MQTT客户端已连接"""
+        if self.client is None:
+            self.client = mqtt.Client()
+            
+            # 设置认证信息（如果有）
+            if settings.MQTT_USERNAME and settings.MQTT_PASSWORD:
+                self.client.username_pw_set(settings.MQTT_USERNAME, settings.MQTT_PASSWORD)
+                self.client.tls_set(ca_certs=settings.MQTT_CERT_PATH)
+            
+            # 设置回调
+            self.client.on_connect = self._on_connect
+            self.client.on_disconnect = self._on_disconnect
+            
+            # 连接MQTT broker
+            logger.info(f"Connecting to MQTT broker {settings.MQTT_BROKER}:{settings.MQTT_PORT}")
+            try:
+                self.client.connect(settings.MQTT_BROKER, settings.MQTT_PORT)
+                self.client.loop_start()
+            except Exception as e:
+                logger.error(f"MQTT连接失败: {str(e)}")
+                raise e
     
     def _on_connect(self, client, userdata, flags, rc):
         """连接回调"""
@@ -42,10 +55,10 @@ class MQTTService:
         else:
             logger.error(f"MQTT连接失败，返回码: {rc}")
     
-    def _on_disconnect(self, client, userdata, rc):
+    def _on_disconnect(self, client, userdata, flags, rc):
         """断开连接回调"""
         if rc != 0:
-            logger.warning("MQTT意外断开连接, rc: {rc}")
+            logger.warning(f"MQTT意外断开连接, rc: {rc}")
             # 尝试重新连接
             try:
                 self.client.reconnect()
@@ -58,12 +71,14 @@ class MQTTService:
         
         Args:
             task_id: 任务ID
-            result_filename: 转写结果文件名
             
         Returns:
             bool: 是否发送成功
         """
         try:
+            # 确保MQTT客户端已连接
+            self._ensure_connected()
+            
             # 构建下载URL
             download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}"
             
@@ -76,23 +91,22 @@ class MQTTService:
             }
             
             # 发送消息，使用task_id作为topic
-            result = self.client.publish(get_topic(task_id), json.dumps(message))
+            topic = get_topic(task_id)
+            result = self.client.publish(topic, json.dumps(message))
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"MQTT消息发送成功: {task_id}, 下载链接: {download_url}")
+                logger.info(f"MQTT消息发送成功: {topic} , 下载链接: {download_url}")
                 return True
             else:
                 logger.error(f"MQTT消息发送失败: {result.rc}")
                 # 尝试重新连接并发送消息
                 try:
                     self.client.reconnect()
-                    result = self.client.publish(get_topic(task_id), json.dumps(message))
+                    result = self.client.publish(topic, json.dumps(message))
                     if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                        logger.info(f"MQTT消息重新发送成功: {task_id}, 下载链接: {download_url}")
+                        logger.info(f"MQTT消息重新发送成功: {topic}, 下载链接: {download_url}")
                         return True
                     else:
-                       logger.error(
-                           f"MQTT消息重新发送失败: {result.rc}"
-                       )
+                        logger.error(f"MQTT消息重新发送失败: {result.rc}")
                 except Exception as e:
                     logger.error(f"重新连接MQTT客户端时出错: {str(e)}")
                 return False
@@ -103,14 +117,24 @@ class MQTTService:
     
     def __del__(self):
         """清理资源"""
-        try:
-            self.client.loop_stop()
-            self.client.disconnect()
-        except:
-            pass
+        if self.client:
+            try:
+                self.client.loop_stop()
+                self.client.disconnect()
+            except:
+                pass
 
-# 创建全局MQTT服务实例
-mqtt_service = MQTTService()
+# 全局MQTT服务实例
+mqtt_service = None
+
+def get_mqtt_service() -> MQTTService:
+    """
+    获取MQTT服务实例
+    """
+    global mqtt_service
+    if mqtt_service is None:
+        mqtt_service = MQTTService.get_instance()
+    return mqtt_service
 
 def get_topic(task_id: str) -> str:
     """

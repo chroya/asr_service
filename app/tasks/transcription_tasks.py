@@ -5,7 +5,6 @@ from celery import shared_task
 from app.core.celery import celery_app
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
-from app.services.mqtt_service import mqtt_service
 
 logger = logging.getLogger(__name__)
 

@@ -43,19 +43,25 @@ def setup_logging(
     formatter = logging.Formatter(log_format)
     
     # 添加文件处理器（按小时滚动）
-    log_file = log_dir / settings.LOG_FILE
-    file_handler = TimedRotatingFileHandler(
-        filename=log_file,
-        when="H",
-        interval=1,
-        backupCount=settings.LOG_BACKUP_COUNT,
-        encoding="utf-8"
-    )
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(log_level)
-    # 设置后缀格式为yyyy-MM-dd_HH
-    file_handler.suffix = "%Y-%m-%d_%H"
-    root_logger.addHandler(file_handler)
+    # 检查是否是通过supervisord运行的
+    is_supervisord = 'SUPERVISOR_ENABLED' in os.environ or os.environ.get('SUPERVISOR_PROCESS_NAME') is not None
+    
+    # 在非supervisord环境或明确要求时添加文件处理器
+    if not is_supervisord or settings.LOG_ALWAYS_TO_FILE:
+        log_file = log_dir / settings.LOG_FILE
+        file_handler = TimedRotatingFileHandler(
+            filename=log_file,
+            when="H",
+            interval=1,
+            backupCount=settings.LOG_BACKUP_COUNT,
+            encoding="utf-8"
+        )
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(log_level)
+        # 设置后缀格式为yyyy-MM-dd_HH
+        file_handler.suffix = "%Y-%m-%d_%H"
+        root_logger.addHandler(file_handler)
+        logging.info("日志系统已初始化，日志文件将按小时存储在 %s 目录", log_dir.absolute())
     
     # 如果需要控制台输出，添加控制台处理器
     if console_output:
@@ -63,8 +69,6 @@ def setup_logging(
         console_handler.setFormatter(formatter)
         console_handler.setLevel(log_level)
         root_logger.addHandler(console_handler)
-    
-    logging.info("日志系统已初始化，日志文件将按小时存储在 %s 目录", log_dir.absolute())
 
 def test_logging():
     """测试日志记录功能"""

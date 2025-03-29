@@ -27,6 +27,7 @@ class Settings():
     LOG_FILE: str = os.getenv("LOG_FILE", "asr_service.log")
     LOG_BACKUP_COUNT: int = int(os.getenv("LOG_BACKUP_COUNT", "72"))  # 3天
     LOG_CONSOLE_OUTPUT: bool = os.getenv("LOG_CONSOLE_OUTPUT", "True").lower() in ("true", "1", "t")
+    LOG_ALWAYS_TO_FILE: bool = os.getenv("LOG_ALWAYS_TO_FILE", "True").lower() in ("true", "1", "t")  # 在supervisor环境中是否仍输出到文件
     
     # Redis设置
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
@@ -58,6 +59,10 @@ class Settings():
     # 文件下载设置
     BASE_URL: str = os.getenv("BASE_URL", "http://150.109.15.121:8000")
     DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/download")
+    
+    # Webhook设置
+    WEBHOOK_TRANSCRIPTION_URL: str = os.getenv("WEBHOOK_TRANSCRIPTION_URL", "http://123.57.134.165/api/v1/webhook/transcription")
+    WEBHOOK_TIMEOUT: int = int(os.getenv("WEBHOOK_TIMEOUT", "10"))  # 默认10秒超时
 
     WHISPER_MODEL_NAME="base"
 

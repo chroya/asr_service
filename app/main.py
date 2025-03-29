@@ -10,6 +10,10 @@ from app.routes import api_app_router, web_app_router
 from app.core.config import settings
 from app.utils.logging_config import setup_logging
 
+# 标记为supervisor环境（如果通过supervisor启动）
+if "SUPERVISOR_PROCESS_NAME" in os.environ:
+    os.environ["SUPERVISOR_ENABLED"] = "1"
+
 # 配置日志
 setup_logging(log_level=logging.INFO)
 
@@ -58,6 +62,9 @@ def create_app() -> FastAPI:
     @app.get("/demo", response_class=RedirectResponse)
     async def demo():
         return "/static/upload_demo.html"
+    
+    # 记录应用启动日志
+    logger.info(f"{settings.APP_NAME} 应用已启动")
     
     return app
 

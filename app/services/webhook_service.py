@@ -46,13 +46,13 @@ class WebhookService:
             # 准备webhook数据并确保使用标准JSON格式（双引号）
             webhook_data = json.loads(json.dumps({
                 "extra_params": extra_params,
-                "result": result,
+                "result": json.dumps(result),
                 "duration": duration,
                 "use_time": use_time
             }))
             
             logger.info(f"发送webhook通知: {self.webhook_url}")
-            logger.info(f"Webhook数据: {json.dumps(webhook_data)}")
+            logger.debug(f"Webhook数据: {json.dumps(webhook_data)}")
             
             # 发送POST请求
             response = requests.post(
@@ -70,8 +70,8 @@ class WebhookService:
                 logger.info(f"Webhook发送成功: {response.status_code}")
                 return True
             else:
-                logger.warning(f"Webhook发送失败: 状态码 {response.status_code}")
-                # logger.warning(f"Webhook发送失败: 状态码 {response.status_code}, 响应: {response.text}")
+                # logger.warning(f"Webhook发送失败: 状态码 {response.status_code}")
+                logger.warning(f"Webhook发送失败: 状态码 {response.status_code}, 响应: {response.text}")
                 return False
                 
         except Exception as e:

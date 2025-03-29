@@ -41,7 +41,7 @@ class WebhookService:
         try:
             # 如果extra_params是Pydantic模型，转换为字典
             if isinstance(extra_params, BaseModel):
-                extra_params = extra_params.model_dump()
+                extra_params = extra_params.model_dump_json()
             
             # 准备webhook数据并确保使用标准JSON格式（双引号）
             webhook_data = json.loads(json.dumps({

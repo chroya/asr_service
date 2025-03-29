@@ -66,7 +66,7 @@ class WebhookService:
                 logger.info(f"Webhook发送成功: {response.status_code}")
                 return True
             else:
-                logger.warning(f"Webhook发送失败: 状态码 {response.status_code}
+                logger.warning(f"Webhook发送失败: 状态码 {response.status_code}")
                 # logger.warning(f"Webhook发送失败: 状态码 {response.status_code}, 响应: {response.text}")
                 return False
                 

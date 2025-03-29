@@ -18,7 +18,6 @@ class Settings():
     # ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
     HF_TOKEN: str = os.getenv("HF_TOKEN", "")
-    WHISPER_MODEL_NAME: str = os.getenv("WHISPER_MODEL_NAME", "")
     
     # 日志设置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -64,7 +63,7 @@ class Settings():
     WEBHOOK_TRANSCRIPTION_URL: str = os.getenv("WEBHOOK_TRANSCRIPTION_URL", "http://123.57.134.165/api/v1/webhook/transcription")
     WEBHOOK_TIMEOUT: int = int(os.getenv("WEBHOOK_TIMEOUT", "10"))  # 默认10秒超时
 
-    WHISPER_MODEL_NAME="base"
+    WHISPER_MODEL_NAME= "base" if DEBUG else os.getenv("WHISPER_MODEL_NAME", "large-v3-turbo")
 
     class Config:
         env_file = ".env"

@@ -1,7 +1,8 @@
 import json
 import logging
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
+from pydantic import BaseModel
 
 from app.core.config import settings
 
@@ -20,7 +21,7 @@ class WebhookService:
     
     def send_transcription_complete(
         self,
-        extra_params: Dict[str, Any],
+        extra_params: Union[Dict[str, Any], BaseModel],
         result: Dict[str, Any],
         duration: int,
         use_time: int
@@ -29,7 +30,7 @@ class WebhookService:
         发送转写完成的webhook通知
         
         Args:
-            extra_params: 给uploadfile的参数，JSON字符串格式
+            extra_params: 给uploadfile的参数，可以是字典或Pydantic模型
             result: 任务执行结果，JSON字符串格式
             duration: 音频时长，单位为秒
             use_time: 任务耗时，单位为秒
@@ -38,10 +39,14 @@ class WebhookService:
             bool: 发送是否成功
         """
         try:
+            # 如果extra_params是Pydantic模型，转换为字典
+            if isinstance(extra_params, BaseModel):
+                extra_params = extra_params.model_dump()
+            
             # 准备webhook数据
             webhook_data = {
-                "extra_params": json.dumps(extra_params) if isinstance(extra_params, dict) else extra_params,
-                "result": json.dumps(result) if isinstance(result, dict) else result,
+                "extra_params": extra_params,
+                "result": result,
                 "duration": duration,
                 "use_time": use_time
             }

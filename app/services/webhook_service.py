@@ -58,7 +58,11 @@ class WebhookService:
             response = requests.post(
                 self.webhook_url,
                 json=webhook_data,  # requests会自动处理JSON序列化
-                timeout=self.timeout
+                timeout=self.timeout,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept":"application/json"
+                }
             )
             
             # 检查响应

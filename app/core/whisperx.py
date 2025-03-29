@@ -35,7 +35,8 @@ class WhisperXProcessor:
         task_id: str,
         language: Optional[str] = None,
         speaker_diarization: bool = False,
-        callback: Optional[Callable[[int, str], None]] = None
+        callback: Optional[Callable[[int, str], None]] = None,
+        whisper_arch: str = settings.WHISPER_MODEL_NAME
     ) -> Tuple[Dict[str, Any], float]:
         """
         处理音频文件
@@ -47,11 +48,12 @@ class WhisperXProcessor:
             language: 音频语言代码（如不提供则自动检测）
             speaker_diarization: 是否启用说话人分离
             callback: 进度回调函数，接收进度百分比和消息参数
+            whisper_arch: Whisper模型名，具体见 whisper_arch.py
             
         Returns:
             Tuple[Dict[str, Any], float]: 转写结果和音频时长
         """
-        logger.info(f"开始处理音频文件: {file_path}, 任务ID: {task_id}, 语言: {language}, 启用说话人分离: {speaker_diarization}")
+        logger.info(f"开始处理音频文件: {file_path}, 任务ID: {task_id}, 语言: {language}, 启用说话人分离: {speaker_diarization}, whisper模型: {whisper_arch}")
         
         # 更新进度
         if callback:
@@ -62,9 +64,9 @@ class WhisperXProcessor:
             if callback:
                 callback(20, "正在转写音频...")
             
-            logger.info(f"加载whisper模型: {settings.WHISPER_MODEL_NAME}")
+            logger.info(f"加载whisper模型: {whisper_arch}")
             # 加载whisper模型
-            model = self._get_model(settings.WHISPER_MODEL_NAME)
+            model = self._get_model(whisper_arch)
             
 
             logger.info(f"开始转写...")

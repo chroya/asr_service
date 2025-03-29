@@ -20,6 +20,7 @@ from app.utils.error_codes import (
 )
 from app.schemas.transcription import TranscriptionTask, RateLimitInfo, TranscriptionExtraParams
 from app.tasks.transcription_tasks import process_transcription
+from app.utils.whisper_arch import ARCH_LIST
 
 router = APIRouter()
 
@@ -60,14 +61,15 @@ async def create_transcription_task(
         file: 要转写的音频文件
         extra_params: JSON字符串，包含额外参数:
             {
-                "u_id": 用户ID,
+                "u_id": 用户ID (必须),
                 "record_file_name": 文件名,
-                "uuid": 唯一标识符,
-                "task_id": 任务ID,
-                "mode_id": 模式ID,
+                "uuid": 唯一标识符(必须),
+                "task_id": 任务ID(必须),
+                "mode_id": 模型ID(必须),
                 "language": 语言代码,
-                "ai_mode": AI模式,
-                "speaker": 是否启用说话人分离(布尔值)
+                "ai_mode": AI模式(必须),
+                "speaker": 是否启用说话人分离(布尔值),
+                "whisper_arch": whisper模型名,具体见 whisper_arch.py
             }
     """
     try:
@@ -83,6 +85,9 @@ async def create_transcription_task(
         mode_id = params.get("mode_id")
         ai_mode = params.get("ai_mode")
         speaker = params.get("speaker", False)
+        whisper_arch = params.get("whisper_arch")
+        if whisper_arch not in ARCH_LIST:
+            whisper_arch = settings.WHISPER_MODEL_NAME
         
         # 验证必须的参数
         if not all([u_id, task_id, uuid_str, mode_id, ai_mode]):
@@ -152,7 +157,8 @@ async def create_transcription_task(
         uuid=uuid_str,
         mode_id=mode_id,
         ai_mode=ai_mode,
-        speaker=speaker
+        speaker=speaker,
+        whisper_arch=whisper_arch
     )
     
     # 将任务添加到Celery队列

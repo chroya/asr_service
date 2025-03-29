@@ -30,6 +30,7 @@ class TranscriptionExtraParams(BaseModel):
     language: str = Field(..., description="语言")
     ai_mode: str = Field(..., description="使用的AI模式（如 GPT-4o）")
     speaker: bool = Field(..., description="是否启用说话人分离")
+    whisper_arch: str = Field(..., description="使用的Whisper模型名")
 
 class TranscriptionTask(BaseModel):
     """

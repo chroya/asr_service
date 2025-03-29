@@ -2,11 +2,17 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-from typing import Optional
-
+from typing import Optional, Union, Callable
+import asyncio
+import aiofiles
 from fastapi import UploadFile
+import logging
 
 from app.core.config import settings
+
+# 定义常量
+CHUNK_SIZE = 1024 * 1024  # 1MB 的块大小
+logger = logging.getLogger(__name__)
 
 async def validate_audio_file(file: UploadFile) -> bool:
     """
@@ -34,7 +40,7 @@ async def validate_audio_file(file: UploadFile) -> bool:
 
 async def get_file_size_mb(file: UploadFile) -> float:
     """
-    获取上传文件的大小（MB）
+    获取上传文件的大小（MB）- 优化的异步实现
     
     Args:
         file: 上传的文件对象
@@ -42,48 +48,84 @@ async def get_file_size_mb(file: UploadFile) -> float:
     Returns:
         float: 文件大小（MB）
     """
-    # 保存当前文件位置
-    current_position = file.file.tell()
+    try:
+        # 尝试直接从文件对象获取大小
+        if hasattr(file.file, 'seek') and hasattr(file.file, 'tell'):
+            current_position = file.file.tell()
+            file.file.seek(0, 2)  # 移动到文件末尾
+            file_size = file.file.tell()
+            file.file.seek(current_position)  # 恢复位置
+            return file_size / (1024 * 1024)
+    except Exception:
+        pass
     
-    # 移动到文件末尾以获取大小
-    file.file.seek(0, 2)  # 2表示从文件末尾开始
-    file_size = file.file.tell()
+    # 如果无法直接获取，使用content-length头
+    if 'content-length' in file.headers:
+        return int(file.headers['content-length']) / (1024 * 1024)
     
-    # 恢复原始位置
-    file.file.seek(current_position)
-    
-    # 转换为MB
-    return file_size / (1024 * 1024)
+    # 最后的备选方案：读取整个文件（不推荐）
+    content = await file.read()
+    await file.seek(0)  # 重置文件指针
+    return len(content) / (1024 * 1024)
 
-async def save_upload_file(file: UploadFile, task_id: str) -> str:
+async def save_upload_file(
+    file: UploadFile,
+    task_id: str,
+    progress_callback: Optional[Callable[[float], None]] = None,
+    return_size: bool = False
+) -> str:
     """
-    保存上传的文件
+    异步保存上传的文件，支持分块处理和进度回调
     
     Args:
         file: 上传的文件对象
         task_id: 任务ID，用于命名文件
+        progress_callback: 进度回调函数，参数为上传进度(0-100)
+        return_size: 是否返回文件大小
         
     Returns:
-        str: 保存的文件路径
+        Union[str, tuple[str, float]]: 如果return_size为True，返回(文件路径, 文件大小MB)的元组，
+                                      否则只返回文件路径
     """
     # 确保上传目录存在
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     
-    # 确定文件扩展名
+    # 确定文件扩展名和保存路径
     file_ext = os.path.splitext(file.filename)[1].lower()
-    
-    # 创建文件路径
     file_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}{file_ext}")
     
-    # 将文件保存到指定路径
-    with open(file_path, "wb") as buffer:
-        # 重置文件指针
-        file.file.seek(0)
-        
-        # 复制文件内容
-        shutil.copyfileobj(file.file, buffer)
+    total_size = 0
+    file_size_mb = await get_file_size_mb(file)
     
-    return file_path
+    try:
+        async with aiofiles.open(file_path, "wb") as buffer:
+            while True:
+                # 分块读取文件内容
+                chunk = await file.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                
+                # 异步写入文件块
+                await buffer.write(chunk)
+                
+                # 更新进度
+                total_size += len(chunk)
+                if progress_callback:
+                    progress = (total_size / (file_size_mb * 1024 * 1024)) * 100
+                    progress_callback(min(progress, 100))
+                
+                # 让出控制权给其他协程
+                await asyncio.sleep(0)
+        
+        logger.info(f"文件保存成功: {file_path}, 大小: {file_size_mb:.2f}MB")
+        return file_path
+        
+    except Exception as e:
+        # 如果保存失败，清理临时文件
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        logger.error(f"文件保存失败: {str(e)}")
+        raise e
 
 def delete_file(file_path: str) -> bool:
     """

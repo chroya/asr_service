@@ -18,7 +18,7 @@ from app.utils.error_codes import (
     ERROR_TASK_NOT_FOUND, ERROR_TASK_NOT_COMPLETED, ERROR_RESULT_NOT_FOUND,
     ERROR_MESSAGES, get_error_message
 )
-from app.schemas.transcription import TranscriptionTask, RateLimitInfo, TranscriptionExtraParams
+from app.schemas.transcription import TranscriptionTask, RateLimitInfo, TranscriptionExtraParams, SimplifiedTranscriptionTask
 from app.tasks.transcription_tasks import process_transcription
 from app.utils.whisper_arch import ARCH_LIST
 
@@ -47,7 +47,7 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
     #     if rate_limit_info.retry_after:
     #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
 
-@router.post("/uploadfile", status_code=status.HTTP_201_CREATED, response_model=TranscriptionTask)
+@router.post("/uploadfile", status_code=status.HTTP_201_CREATED, response_model=SimplifiedTranscriptionTask)
 async def create_transcription_task(
     request: Request,
     response: Response,
@@ -93,10 +93,9 @@ async def create_transcription_task(
         if not all([u_id, task_id, uuid_str, mode_id, ai_mode]):
             raise ValueError("缺少必要的参数")
     except (json.JSONDecodeError, ValueError) as e:
-        error_response = TranscriptionTask(
+        error_response = SimplifiedTranscriptionTask(
             task_id=task_id if 'task_id' in locals() else "unknown",
             client_id=str(u_id) if 'u_id' in locals() else "unknown",
-            status="failed",
             filename=file.filename,
             file_path="",
             created_at=datetime.now().isoformat(),
@@ -108,10 +107,9 @@ async def create_transcription_task(
     
     # 验证文件
     if not await validate_audio_file(file):
-        error_response = TranscriptionTask(
+        error_response = SimplifiedTranscriptionTask(
             task_id=task_id,
             client_id=str(u_id),
-            status="failed",
             filename=file.filename,
             file_path="",
             created_at=datetime.now().isoformat(),
@@ -124,10 +122,9 @@ async def create_transcription_task(
     # 检查文件大小
     file_size_mb = await get_file_size_mb(file)
     if file_size_mb > settings.MAX_UPLOAD_SIZE:
-        error_response = TranscriptionTask(
+        error_response = SimplifiedTranscriptionTask(
             task_id=task_id,
             client_id=str(u_id),
-            status="failed",
             filename=file.filename,
             file_path="",
             created_at=datetime.now().isoformat(),
@@ -167,19 +164,31 @@ async def create_transcription_task(
     # 添加速率限制信息到响应头
     add_rate_limit_headers(response, client_id)
     
-    return task
+    # 转换为简化版返回对象
+    simplified_task = SimplifiedTranscriptionTask(
+        task_id=task.task_id,
+        client_id=task.client_id,
+        filename=task.filename,
+        file_path=task.file_path,
+        result_path=task.result_path,
+        created_at=task.created_at,
+        extra_params=task.extra_params,
+        code=task.code,
+        message=task.message
+    )
+    
+    return simplified_task
 
-@router.get("/task/{task_id}", response_model=TranscriptionTask)
+@router.get("/task/{task_id}", response_model=SimplifiedTranscriptionTask)
 async def get_task(task_id: str, request: Request, response: Response):
     """
     获取转写任务的状态和信息
     """
     task = transcription_service.get_task(task_id)
     if not task:
-        error_response = TranscriptionTask(
+        error_response = SimplifiedTranscriptionTask(
             task_id=task_id,
             client_id="unknown",
-            status="failed",
             filename="",
             file_path="",
             created_at=datetime.now().isoformat(),
@@ -189,13 +198,20 @@ async def get_task(task_id: str, request: Request, response: Response):
         response.status_code = status.HTTP_404_NOT_FOUND
         return error_response
     
-    # 获取客户端ID
-    client_id = task.client_id
+    # 转换为简化版返回对象
+    simplified_task = SimplifiedTranscriptionTask(
+        task_id=task.task_id,
+        client_id=task.client_id,
+        filename=task.filename,
+        file_path=task.file_path,
+        result_path=task.result_path,
+        created_at=task.created_at,
+        extra_params=task.extra_params,
+        code=task.code,
+        message=task.message
+    )
     
-    # 添加速率限制信息到响应头
-    add_rate_limit_headers(response, client_id)
-    
-    return task
+    return simplified_task
 
 @router.get("/download/{task_id}", response_class=Response)
 async def download_result_file(task_id: str, request: Request, response: Response):

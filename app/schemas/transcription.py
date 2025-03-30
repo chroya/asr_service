@@ -83,19 +83,56 @@ class TranscriptionTask(BaseModel):
                     "speaker": True
                 }
             }
-        } 
+        }
+
+class SimplifiedTranscriptionTask(BaseModel):
+    """
+    简化版转写任务详情，去除了一些字段
+    """
+    task_id: str = Field(..., description="任务ID")
+    client_id: str = Field(..., description="客户端ID")
+    filename: str = Field(..., description="原始文件名")
+    file_path: str = Field(..., description="文件存储路径")
+    result_path: Optional[str] = Field(None, description="结果文件存储路径")
+    created_at: str = Field(..., description="创建时间")
+    extra_params: Optional[TranscriptionExtraParams] = Field(None, description="额外参数")
+    code: int = Field(0, description="状态码：0表示成功，其他值表示失败")
+    message: str = Field("", description="状态消息，成功时为空，失败时为错误信息")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "123e4567-e89b-12d3-a456-426614174000",
+                "client_id": "client-123",
+                "filename": "meeting.mp3",
+                "file_path": "/uploads/123e4567-e89b-12d3-a456-426614174000.mp3",
+                "created_at": "2023-06-15T10:30:00",
+                "code": 0,
+                "message": "",
+                "extra_params": {
+                    "u_id": 12345,
+                    "record_file_name": "会议记录.mp3",
+                    "uuid": "abc123-def456-ghi789",
+                    "task_id": "UID:12345_a1b2c3d4e5f6",
+                    "mode_id": 1,
+                    "language": "zh",
+                    "ai_mode": "GPT-4o",
+                    "speaker": True
+                }
+            }
+        }
 
 class RateLimitInfo(BaseModel):
     """
-    API 速率限制信息
+    速率限制信息
     """
-    limit_audio_seconds: int = Field(..., description="当前用户每日可上传音频秒数")
-    limit_requests: int = Field(..., description="当前用户每日可发起请求数")
-    remaining_audio_seconds: int = Field(..., description="剩余的每日音频秒数")
-    remaining_requests: int = Field(..., description="剩余的每日请求次数")
-    reset_audio_seconds: float = Field(..., description="距离音频限制重置的剩余秒数")
-    reset_requests: float = Field(..., description="距离请求限制重置的剩余秒数")
-    retry_after: Optional[float] = Field(None, description="如果达到限制，需要等待的秒数")
+    limit_audio_seconds: int  # 总音频时长限制（秒）
+    limit_requests: int  # 总请求次数限制
+    remaining_audio_seconds: int  # 剩余可用音频时长（秒）
+    remaining_requests: int  # 剩余可用请求次数
+    reset_audio_seconds: float  # 音频时长限制重置时间（小时）
+    reset_requests: float  # 请求次数限制重置时间（小时）
+    retry_after: Optional[float] = None  # 如果被限制，需要等待的时间（秒）
 
 class TranscriptionResponse(BaseModel):
     """

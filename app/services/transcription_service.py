@@ -195,7 +195,7 @@ class TranscriptionService:
             List[TranscriptionTask]: 任务列表
         """
         # 获取客户端的任务ID列表
-        task_ids = self.storage.get("") or []
+        task_ids = self.storage.get_keys("") or []
         
         # 分页
         task_ids = task_ids[offset:offset + limit]

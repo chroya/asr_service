@@ -276,10 +276,16 @@
                     }
                 })
                 .then(data => {
-                    document.getElementById('task-status').textContent = data.status;
-                    updateProgressBar(data.progress || 0);
+                    // 从code判断状态
+                    const taskStatus = data.code === 0 ? 'completed' : (data.code > 0 ? 'failed' : 'processing');
+                    document.getElementById('task-status').textContent = taskStatus;
                     
-                    if (data.status === 'completed') {
+                    // 从extra_params获取language
+                    let language = data.extra_params?.language || 'auto';
+                    document.getElementById('task-language').textContent = language;
+                    
+                    // 当任务完成时（code为0），下载按钮才可用
+                    if (data.code === 0) {
                         downloadResultBtn.classList.remove('d-none');
                         fetchResult(data.task_id);
                     } else {

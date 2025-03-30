@@ -68,7 +68,7 @@ class Settings():
     CELERY_TASK_TIME_LIMIT: int = int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600"))
     CELERY_WORKER_MAX_TASKS_PER_CHILD: int = int(os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "50"))
 
-    WHISPER_MODEL_NAME= "base" if DEBUG else os.getenv("WHISPER_MODEL_NAME", "large-v3-turbo")
+    WHISPER_MODEL_NAME= "base" if DEBUG else os.getenv("WHISPER_MODEL_NAME", "base")
 
     class Config:
         env_file = ".env"

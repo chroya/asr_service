@@ -8,6 +8,7 @@ from datetime import datetime
 from faster_whisper import transcribe
 from app.core.config import settings
 from app.utils.time import convert_to_time_format
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,44 @@ class WhisperXProcessor:
         # 模型缓存
         self.model_cache = {}
     
+    def _get_model(self, model_size: str = "small"):
+        """
+        获取WhisperX模型，如果已加载则从缓存返回
+        
+        Args:
+            model_size: 模型大小，可选值: tiny, base, small, medium, large
+            
+        Returns:
+            加载的模型
+        """
+        if model_size not in self.model_cache:
+            logger.info(f"加载WhisperX模型: {model_size}")
+            
+            self.model_cache[model_size] = whisperx.load_model(
+                model_size,
+                device=DEVICE,
+                compute_type="float16" if DEVICE == "cuda" else "float32"
+            )
+        
+        return self.model_cache[model_size]
+    
+    def prepare_model(self, model_size: str = "small"):
+        """
+        预加载WhisperX模型，用于单独测量模型加载时间
+        
+        Args:
+            model_size: 模型大小
+            
+        Returns:
+            bool: 模型是否成功加载
+        """
+        try:
+            self._get_model(model_size)
+            return True
+        except Exception as e:
+            logger.error(f"加载模型失败 {model_size}: {str(e)}")
+            return False
+    
     def process_audio(
         self, 
         file_path: str, 
@@ -37,7 +76,7 @@ class WhisperXProcessor:
         speaker_diarization: bool = False,
         callback: Optional[Callable[[int, str], None]] = None,
         whisper_arch: str = settings.WHISPER_MODEL_NAME
-    ) -> Tuple[Dict[str, Any], float]:
+    ) -> Tuple[Dict[str, Any], float, Dict[str, float]]:
         """
         处理音频文件
         
@@ -51,9 +90,18 @@ class WhisperXProcessor:
             whisper_arch: Whisper模型名，具体见 whisper_arch.py
             
         Returns:
-            Tuple[Dict[str, Any], float]: 转写结果和音频时长
+            Tuple[Dict[str, Any], float, Dict[str, float]]: 转写结果、音频时长和各阶段耗时
         """
         logger.info(f"开始处理音频文件: {file_path}, 任务ID: {task_id}, 语言: {language}, 启用说话人分离: {speaker_diarization}, whisper模型: {whisper_arch}")
+        
+        # 时间测量变量
+        start_time = time.time()
+        timing_stats = {
+            "model_loading_time": 0,
+            "transcription_time": 0,
+            "diarization_time": 0,
+            "post_processing_time": 0
+        }
         
         # 更新进度
         if callback:
@@ -66,17 +114,20 @@ class WhisperXProcessor:
             
             logger.info(f"加载whisper模型: {whisper_arch}")
             # 加载whisper模型
+            model_loading_start = time.time()
             model = self._get_model(whisper_arch)
-            
+            timing_stats["model_loading_time"] = time.time() - model_loading_start
 
             logger.info(f"开始转写...")
             
             # 转写音频，如果指定了语言则传入
+            transcription_start = time.time()
             transcription = model.transcribe(
                 file_path, 
                 batch_size=16,
                 language=language,
             )
+            timing_stats["transcription_time"] = time.time() - transcription_start
 
             logger.info(f"转写完成...")
             
@@ -92,6 +143,9 @@ class WhisperXProcessor:
                 try:
                     if callback:
                         callback(60, "正在进行说话人分离...")
+                    
+                    # 开始测量说话人分离时间
+                    diarization_start = time.time()
                     
                     # 加载说话人分离模型
                     diarize_model = whisperx.DiarizationPipeline(
@@ -118,6 +172,9 @@ class WhisperXProcessor:
                     # 更新segments
                     transcription["segments"] = result["segments"]
                     
+                    # 记录说话人分离时间
+                    timing_stats["diarization_time"] = time.time() - diarization_start
+                    
                     if callback:
                         callback(80, "说话人分离完成...")
                 except Exception as e:
@@ -126,6 +183,9 @@ class WhisperXProcessor:
             # 步骤4: 提取完整文本
             if callback:
                 callback(90, "正在生成最终结果...")
+            
+            # 开始测量后处理时间
+            post_processing_start = time.time()
             
             # 从segments中提取完整文本
             full_text = ""
@@ -160,38 +220,26 @@ class WhisperXProcessor:
             with open(result_path, "w", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             
-            logger.info(f"音频处理完成: {task_id}, 时长: {audio_duration}秒, 语言: {detected_language}")
+            # 记录后处理时间
+            timing_stats["post_processing_time"] = time.time() - post_processing_start
+            
+            # 记录总处理时间
+            total_time = time.time() - start_time
+            timing_stats["total_time"] = total_time
+            
+            logger.info(f"音频处理完成: {task_id}, 时长: {audio_duration}秒, 语言: {detected_language}, 总耗时: {total_time:.2f}秒")
+            logger.info(f"各阶段耗时: 模型加载={timing_stats['model_loading_time']:.2f}秒, 转写={timing_stats['transcription_time']:.2f}秒, " + 
+                        f"说话人分离={timing_stats['diarization_time']:.2f}秒, 后处理={timing_stats['post_processing_time']:.2f}秒")
             
             # 完成
             if callback:
                 callback(100, "处理完成")
             
-            return result, audio_duration
+            return result, audio_duration, timing_stats
             
         except Exception as e:
             logger.exception(f"处理音频文件失败: {str(e)}")
             raise
-    
-    def _get_model(self, model_size: str = "small"):
-        """
-        获取WhisperX模型，如果已加载则从缓存返回
-        
-        Args:
-            model_size: 模型大小，可选值: tiny, base, small, medium, large
-            
-        Returns:
-            加载的模型
-        """
-        if model_size not in self.model_cache:
-            logger.info(f"加载WhisperX模型: {model_size}")
-            
-            self.model_cache[model_size] = whisperx.load_model(
-                model_size,
-                device=DEVICE,
-                compute_type="float16" if DEVICE == "cuda" else "float32"
-            )
-        
-        return self.model_cache[model_size]
     
     def clear_cache(self):
         """清除模型缓存"""

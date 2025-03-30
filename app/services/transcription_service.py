@@ -304,19 +304,49 @@ class TranscriptionService:
             
             # 开始处理
             start_time = time.time()
-        
-            result, audio_duration = self.processor.process_audio(
-                    task.file_path,
-                    task.result_path,
-                    task_id,
-                    language=language if language != "auto" else None,
-                    speaker_diarization=speaker_diarization,
-                    callback=lambda progress, message: self._update_progress(task_id, progress, message),
-                    whisper_arch = whisper_arch
-                )
+            init_time = time.time() - start_time
+            
+            # 各阶段时间测量
+            model_loading_start = time.time()
+            
+            # 获取处理器，记录模型加载时间
+            model_load_result = self.processor.prepare_model(whisper_arch)
+            model_loading_time = time.time() - model_loading_start
+            
+            logger.info(f"模型加载耗时: {model_loading_time:.2f}秒")
+            
+            # 开始转写处理
+            transcription_start = time.time()
+            
+            # 调用处理器处理音频
+            result_data = self.processor.process_audio(
+                task.file_path,
+                task.result_path,
+                task_id,
+                language=language if language != "auto" else None,
+                speaker_diarization=speaker_diarization,
+                callback=lambda progress, message: self._update_progress(task_id, progress, message),
+                whisper_arch=whisper_arch
+            )
+            
+            # 解构处理结果
+            if isinstance(result_data, tuple) and len(result_data) >= 2:
+                result, audio_duration = result_data
+                detailed_timings = result_data[2] if len(result_data) > 2 else {}
+            else:
+                result, audio_duration = result_data, 0
+                detailed_timings = {}
+            
+            # 获取转写和说话人分离的时间（如果有）
+            transcription_time = detailed_timings.get('transcription_time', time.time() - transcription_start)
+            diarization_time = detailed_timings.get('diarization_time', 0)
+            
+            # 后处理时间
+            post_processing_start = time.time()
             
             # 计算处理时间
             processing_time = time.time() - start_time
+            post_processing_time = time.time() - post_processing_start
             
             # 更新任务状态和结果
             self.update_task(
@@ -334,6 +364,7 @@ class TranscriptionService:
 
             # 处理完成的log，包括音频时长、处理耗时
             logger.info(f"Task {task_id} completed. Audio duration: {audio_duration} seconds, Processing time: {processing_time} seconds")
+            logger.info(f"Task {task_id} timings: model_loading={model_loading_time:.2f}s, transcription={transcription_time:.2f}s, diarization={diarization_time:.2f}s, post_processing={post_processing_time:.2f}s")
             
             # 发送MQTT通知
             get_mqtt_service().send_transcription_complete(task_id)
@@ -350,7 +381,12 @@ class TranscriptionService:
             return {
                 "status": "completed",
                 "audio_duration": audio_duration,
-                "result": result
+                "result": result,
+                "model_loading_time": model_loading_time,
+                "transcription_time": transcription_time,
+                "diarization_time": diarization_time,
+                "post_processing_time": post_processing_time,
+                "total_processing_time": processing_time
             }
                 
         except Exception as e:

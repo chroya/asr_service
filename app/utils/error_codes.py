@@ -50,8 +50,6 @@ def get_error_message(code: int, custom_message: str = None) -> str:
     Returns:
         str: 错误描述信息
     """
-    if code == SUCCESS:
-        return ""
     
     if custom_message:
         return custom_message

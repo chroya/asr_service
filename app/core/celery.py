@@ -5,7 +5,7 @@ from app.core.config import settings
 # 创建Celery实例
 celery_app = Celery(
     "asr_service",
-    broker=f"redis://{':' + settings.REDIS_PASSWORD + '@' if settings.REDIS_PASSWORD else ''}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+    broker=f"redis://{':' + settings.REDIS_PASSWORD + '@' if settings.REDIS_PASSWORD else ''}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY}"
 )
 
 # 配置Celery
@@ -18,7 +18,7 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,  # 任务完成后才确认任务已经完成
     task_reject_on_worker_lost=True,  # worker崩溃后，任务会被重新执行
-    result_backend=f"redis://{':' + settings.REDIS_PASSWORD + '@' if settings.REDIS_PASSWORD else ''}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
+    result_backend=f"redis://{':' + settings.REDIS_PASSWORD + '@' if settings.REDIS_PASSWORD else ''}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY}",
     imports=["app.tasks.transcription_tasks"],  # 直接导入任务模块
     broker_connection_retry_on_startup=True,  # 解决启动时的连接重试警告
 )

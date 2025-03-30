@@ -63,6 +63,11 @@ class Settings():
     WEBHOOK_TRANSCRIPTION_URL: str = os.getenv("WEBHOOK_TRANSCRIPTION_URL", "http://123.57.134.165/api/v1/webhook/transcription")
     WEBHOOK_TIMEOUT: int = int(os.getenv("WEBHOOK_TIMEOUT", "10"))  # 默认10秒超时
 
+    # Celery设置
+    CELERY_WORKER_CONCURRENCY: int = int(os.getenv("CELERY_WORKER_CONCURRENCY", "2"))
+    CELERY_TASK_TIME_LIMIT: int = int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600"))
+    CELERY_WORKER_MAX_TASKS_PER_CHILD: int = int(os.getenv("CELERY_WORKER_MAX_TASKS_PER_CHILD", "50"))
+
     WHISPER_MODEL_NAME= "base" if DEBUG else os.getenv("WHISPER_MODEL_NAME", "large-v3-turbo")
 
     class Config:

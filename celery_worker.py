@@ -11,6 +11,7 @@ import gc
 import psutil
 import signal
 from app.core.celery import celery_app
+from app.core.config import settings
 from app.utils.logging_config import setup_logging
 
 
@@ -67,7 +68,23 @@ if __name__ == "__main__":
     # os.environ['MKL_NUM_THREADS'] = '1'  # 限制MKL线程数
     
     try:
-        # 启动Worker - 使用prefork池（多进程模式），并设置并发数为2
-        celery_app.worker_main(["worker", "--loglevel=info", "-P", "prefork", "--without-gossip", "--without-mingle"])
+        # 从配置中获取worker设置
+        concurrency = settings.CELERY_WORKER_CONCURRENCY
+        time_limit = settings.CELERY_TASK_TIME_LIMIT
+        max_tasks_per_child = settings.CELERY_WORKER_MAX_TASKS_PER_CHILD
+        
+        logger.info(f"启动Celery Worker，并发数：{concurrency}，任务超时时间：{time_limit}秒，每个子进程最大任务数：{max_tasks_per_child}")
+
+        # 启动Worker
+        celery_app.worker_main([
+            "worker",
+            "--loglevel=info",
+            "-P", "prefork",
+            "--concurrency", str(concurrency),
+            "--time-limit", str(time_limit),
+            "--max-tasks-per-child", str(max_tasks_per_child),
+            "--without-gossip",
+            "--without-mingle"
+        ])
     except Exception as e:
         logger.error(f"Celery Worker启动失败: {str(e)}")

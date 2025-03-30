@@ -16,8 +16,6 @@ celery_app.conf.update(
     timezone="Asia/Shanghai",
     enable_utc=False,
     task_track_started=True,
-    task_time_limit=3600,  # 任务最多执行1小时
-    worker_max_tasks_per_child=10,  # 每个worker最多处理10个任务，然后重启
     task_acks_late=True,  # 任务完成后才确认任务已经完成
     task_reject_on_worker_lost=True,  # worker崩溃后，任务会被重新执行
     result_backend=f"redis://{':' + settings.REDIS_PASSWORD + '@' if settings.REDIS_PASSWORD else ''}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
@@ -32,6 +30,3 @@ celery_app.autodiscover_tasks(["app.tasks"])
 celery_app.conf.beat_schedule = {
     # 可以在这里添加定期任务
 }
-
-# 启动Celery时的命令行参数
-celery_app.conf.worker_concurrency = os.cpu_count() or 2  # 根据CPU核心数设置并发数 

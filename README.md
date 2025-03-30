@@ -127,6 +127,55 @@ curl -X POST "http://localhost:8000/api/uploadfile" \
   }"
 ```
 
+## 性能测试
+
+### 压力测试工具
+
+为了测试API的并发处理能力，项目提供了异步压测脚本。该脚本使用`asyncio`和`aiohttp`模拟多用户并发上传音频文件，并记录性能指标。
+
+#### 安装压测依赖
+
+```bash
+# 安装压测所需依赖
+pip install -r tests/requirements.txt
+```
+
+#### 使用方法
+
+压测脚本位于`tests/load_test.py`，支持多种参数自定义：
+
+```bash
+# 基本用法 - 默认10个并发用户，持续60秒
+python tests/load_test.py
+
+# 自定义参数
+python tests/load_test.py --url http://localhost:8000/api/uploadfile --users 20 --duration 120 --audio-dir ./uploads
+```
+
+主要参数说明：
+- `--url`: 转写API的URL（默认：http://localhost:8000/api/uploadfile）
+- `--users`: 并发用户数（默认：10）
+- `--duration`: 测试持续时间，单位秒（默认：60）
+- `--audio-dir`: 音频文件目录，脚本会自动搜索该目录下的音频文件（默认：./uploads）
+
+#### 测试结果解析
+
+压测完成后，脚本会生成详细的测试报告，包含以下指标：
+
+- **请求数据**：总请求数、成功/失败请求数、成功率
+- **性能指标**：每秒请求数(RPS)、测试持续时间
+- **响应时间**：最小/最大/平均响应时间
+- **百分位数据**：50%/90%/95%/99%请求的响应时间
+
+#### 测试策略建议
+
+1. **梯度测试**：从低并发(5-10)开始，逐步增加到中等(20-50)和高并发(100+)
+2. **系统监控**：测试期间建议使用`htop`或`top`监控服务器资源使用情况
+3. **关键指标**：重点关注RPS(每秒请求数)和95%请求的响应时间
+4. **瓶颈分析**：当响应时间急剧增加或成功率下降时，表明系统达到性能瓶颈
+
+压测日志会保存到`load_test.log`文件，可用于后续分析。
+
 ## 部署指南
 
 ### 使用Docker部署
@@ -248,18 +297,16 @@ asr_service/
 │   │   └── web/              # Web界面路由
 │   ├── services/             # 服务层
 │   ├── static/               # 静态文件
-│   ├── tasks/                # Celery任务
-│   ├── templates/            # 模板文件
-│   ├── utils/                # 工具类
-│   └── main.py               # 应用入口
-├── uploads/                  # 上传文件目录
-├── transcriptions/           # 转写结果目录
-├── logs/                     # 日志目录
+│   └── utils/                # 工具函数
+│       ├── files.py          # 文件处理工具
+│       └── logging_config.py # 日志配置
 ├── celery_worker.py          # Celery Worker启动脚本
-├── celery_flower.py          # Celery Flower监控启动脚本
-├── .env.example              # 环境变量示例
-├── requirements.txt          # 依赖项
-└── README.md                 # 项目说明
+├── celery_flower.py          # Celery Flower启动脚本
+├── tests/                    # 测试目录
+│   ├── load_test.py          # 压力测试脚本
+│   └── requirements.txt      # 测试依赖
+├── supervisor_config.ini     # Supervisor配置
+└── requirements.txt          # 项目依赖
 ```
 
 ## 许可证

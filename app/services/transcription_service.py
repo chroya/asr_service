@@ -326,13 +326,7 @@ class TranscriptionService:
                 whisper_arch=whisper_arch
             )
             
-            # 解构处理结果
-            if isinstance(result_data, tuple) and len(result_data) >= 2:
-                result, audio_duration = result_data
-                detailed_timings = result_data[2] if len(result_data) > 2 else {}
-            else:
-                result, audio_duration = result_data, 0
-                detailed_timings = {}
+            result, audio_duration, detailed_timings = result_data
             
             # 获取转写和说话人分离的时间（如果有）
             transcription_time = detailed_timings.get('transcription_time', time.time() - transcription_start)

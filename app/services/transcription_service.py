@@ -1,10 +1,6 @@
 import os
-import json
-import uuid
 import logging
 import time
-import shutil
-import asyncio
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 
@@ -14,12 +10,9 @@ from app.core.config import settings
 from app.core.whisperx import WhisperXProcessor
 from app.utils.storage import RedisStorage
 from app.utils.error_codes import (
-    SUCCESS, ERROR_FILE_NOT_FOUND, ERROR_PROCESSING_FAILED, 
-    ERROR_MESSAGES, get_error_message
+     SUCCESS, ERROR_PROCESSING_FAILED, get_error_message
 )
 from app.schemas.transcription import TranscriptionTask, TranscriptionExtraParams
-from app.services.mqtt_service import get_mqtt_service
-from app.services.webhook_service import get_webhook_service
 
 logger = logging.getLogger(__name__)
 
@@ -254,31 +247,26 @@ class TranscriptionService:
     '''
     def process_task_sync(self, task_id: str) -> Dict[str, Any]:
         """
-        同步处理转写任务（Celery任务使用）
+        同步处理转写任务
         
         Args:
             task_id: 任务ID
             
         Returns:
-            Dict[str, Any]: 处理结果的字典表示
+            Dict[str, Any]: 处理结果的字典表示，包含：
+                - status: 状态 ('completed' 或 'failed')
+                - error: 错误信息（如果失败）
+                - code: 错误码
+                - result: 处理结果（如果成功）
+                - audio_duration: 音频时长（如果成功）
+                - model_loading_time: 模型加载时间
+                - transcription_time: 转写时间
+                - diarization_time: 说话人分离时间（如果启用）
+                - post_processing_time: 后处理时间
+                - total_processing_time: 总处理时间
         """
-        # 获取任务信息
+        # 获取任务信息 - 仅用于获取任务参数，不做存在性检查
         task = self.get_task(task_id)
-        if not task:
-            logger.error(f"任务不存在: {task_id}")
-            return {"status": "failed", "error": "任务不存在"}
-        
-        # 检查文件是否存在
-        if not os.path.exists(task.file_path):
-            self.update_task(
-                task_id,
-                status="failed",
-                error_message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND],
-                code=ERROR_FILE_NOT_FOUND,
-                message=ERROR_MESSAGES[ERROR_FILE_NOT_FOUND]
-            )
-            logger.error(f"任务音频文件不存在: {task.file_path}")
-            return {"status": "failed", "error": "文件不存在"}
         
         try:
             # 更新任务状态为处理中
@@ -291,7 +279,7 @@ class TranscriptionService:
             # 获取额外参数
             language = task.language
             speaker_diarization = task.extra_params.speaker if task.extra_params else False
-            whisper_arch = task.extra_params.whisper_arch if task.extra_params else whisper_arch
+            whisper_arch = task.extra_params.whisper_arch if task.extra_params else settings.WHISPER_MODEL_NAME
             
             if task.extra_params and 'language' in task.extra_params:
                 language = task.extra_params.get('language')
@@ -301,7 +289,6 @@ class TranscriptionService:
             
             # 开始处理
             start_time = time.time()
-            init_time = time.time() - start_time
             
             # 各阶段时间测量
             model_loading_start = time.time()
@@ -357,20 +344,9 @@ class TranscriptionService:
             logger.info(f"Task {task_id} completed. Audio duration: {audio_duration} seconds, Processing time: {processing_time} seconds")
             logger.info(f"Task {task_id} timings: model_loading={model_loading_time:.2f}s, transcription={transcription_time:.2f}s, diarization={diarization_time:.2f}s, post_processing={post_processing_time:.2f}s")
             
-            # 发送MQTT通知
-            get_mqtt_service().send_transcription_complete(task_id)
-            
-            # 发送Webhook通知
-            webhook_service = get_webhook_service()
-            webhook_service.send_transcription_complete(
-                extra_params=task.extra_params or {},
-                result=result,
-                duration=int(audio_duration),
-                use_time=int(processing_time)
-            )
-            
             return {
                 "status": "completed",
+                "code": SUCCESS,
                 "audio_duration": audio_duration,
                 "result": result,
                 "model_loading_time": model_loading_time,
@@ -392,4 +368,8 @@ class TranscriptionService:
                 message=get_error_message(ERROR_PROCESSING_FAILED, f"处理失败: {error_message}")
             )
             logger.exception(f"处理任务失败: {task_id} - {error_message}")
-            return {"status": "failed", "error": error_message} 
+            return {
+                "status": "failed", 
+                "error": error_message,
+                "code": ERROR_PROCESSING_FAILED
+            } 

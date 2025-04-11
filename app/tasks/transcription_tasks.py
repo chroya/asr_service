@@ -1,24 +1,32 @@
+from datetime import datetime
 import os
 import logging
 import time
-from typing import Dict, Any, Optional
-from celery import shared_task
+from typing import Dict, Any, Optional, Tuple
 
 from app.core.celery import celery_app
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
+from app.services.mqtt_service import get_mqtt_service
+from app.services.webhook_service import get_webhook_service
+from app.utils.error_codes import (
+    SUCCESS, ERROR_TASK_NOT_FOUND, ERROR_FILE_NOT_FOUND, 
+    ERROR_PROCESSING_FAILED, get_error_message
+)
 
 logger = logging.getLogger(__name__)
 
 # 服务实例
 transcription_service = TranscriptionService()
 cloud_stats_service = CloudStatsService()
+webhook_service = get_webhook_service()
 
 def create_task_result(
     status: str,
     task_id: str,
     error: Optional[str] = None,
     timings: Optional[Dict[str, float]] = None,
+    code: int = SUCCESS,
     **extra_data
 ) -> Dict[str, Any]:
     """
@@ -29,6 +37,7 @@ def create_task_result(
         task_id: 任务ID
         error: 错误信息(如果有)
         timings: 各步骤耗时信息
+        code: 错误码
         **extra_data: 额外的数据字段
     
     Returns:
@@ -37,7 +46,8 @@ def create_task_result(
     result = {
         "status": status,
         "task_id": task_id,
-        "timestamp": time.time()
+        "timestamp": time.time(),
+        "code": code
     }
     
     if error:
@@ -51,7 +61,54 @@ def create_task_result(
     
     return result
 
-# 使用celery_app.task装饰器替代shared_task，确保任务直接注册到应用
+def check_task_prerequisites(task_id: str, start_time: float) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    检查任务的前置条件（任务是否存在，文件是否存在等）
+    
+    Args:
+        task_id: 任务ID
+        start_time: 任务开始时间
+        
+    Returns:
+        Tuple[Optional[Dict], Optional[Dict]]: (task, error_result)
+        如果检查通过，返回 (task, None)
+        如果检查失败，返回 (None, error_result)
+    """
+    # 获取任务信息
+    task = transcription_service.get_task(task_id)
+    if not task:
+        error_result = create_task_result(
+            status="failed",
+            task_id=task_id,
+            error="任务不存在",
+            code=ERROR_TASK_NOT_FOUND,
+            timings={"task_received": time.time() - start_time}
+        )
+        return None, error_result
+    
+    # 检查文件是否存在
+    if not os.path.exists(task.file_path):
+        transcription_service.update_task(
+            task_id,
+            status="failed",
+            error_message=get_error_message(ERROR_FILE_NOT_FOUND),
+            code=ERROR_FILE_NOT_FOUND,
+            message=get_error_message(ERROR_FILE_NOT_FOUND)
+        )
+        error_result = create_task_result(
+            status="failed",
+            task_id=task_id,
+            error=get_error_message(ERROR_FILE_NOT_FOUND),
+            code=ERROR_FILE_NOT_FOUND,
+            timings={
+                "task_received": time.time() - start_time,
+                "file_check": time.time() - start_time
+            }
+        )
+        return None, error_result
+    
+    return task, None
+
 @celery_app.task(name="process_transcription", bind=True)
 def process_transcription(self, task_id: str):
     """
@@ -65,137 +122,119 @@ def process_transcription(self, task_id: str):
     start_time = time.time()
     logger.info(f"开始处理转写任务: {task_id}")
     
-    # 获取任务信息
-    task = transcription_service.get_task(task_id)
-    if not task:
-        logger.error(f"任务不存在: {task_id}")
-        return create_task_result(
-            status="failed",
-            task_id=task_id,
-            error="任务不存在",
-            timings={"task_received": time.time() - start_time}
+    # 检查任务前置条件
+    task, error_result = check_task_prerequisites(task_id, start_time)
+    if error_result:
+        # 发送失败通知
+        get_mqtt_service().send_transcription_complete(
+            task_id, 
+            code=error_result["code"],
+            message=error_result["error"]
         )
-    
-    # 获取客户端ID
-    client_id = task.client_id
+        return error_result
     
     try:
-        # 调用同步处理方法
-        async_result = process_task_sync(task_id, start_time)
+        # 更新任务状态为处理中
+        transcription_service.update_task(
+            task_id,
+            status="processing",
+            started_at=datetime.now().isoformat()
+        )
         
-        # 如果任务成功完成，报告任务完成
-        if async_result['status'] == 'completed':
-            audio_duration = async_result.get('audio_duration', 0)
-            cloud_stats_service.report_task_completion(client_id, audio_duration)
+        # 执行转写处理
+        result = transcription_service.process_task_sync(task_id)
+        
+        if result['status'] == 'completed':
+            audio_duration = result.get('audio_duration', 0)
             
-        return async_result
-        
+            # 报告任务完成
+            cloud_stats_service.report_task_completion(task.client_id, audio_duration)
+            
+            # 发送Webhook通知
+            webhook_service.send_transcription_complete(
+                extra_params=task.extra_params or {},
+                result=result.get('result', {}),
+                duration=int(audio_duration),
+                use_time=int(time.time() - start_time)
+            )
+            
+            # 发送成功的MQTT通知
+            get_mqtt_service().send_transcription_complete(task_id, code=SUCCESS)
+            
+            # 创建成功结果
+            return create_task_result(
+                status="completed",
+                task_id=task_id,
+                code=SUCCESS,
+                audio_duration=audio_duration,
+                result=result.get('result', {}),
+                timings={
+                    "total_time": time.time() - start_time,
+                    "model_loading": result.get('model_loading_time', 0),
+                    "transcription": result.get('transcription_time', 0),
+                    "diarization": result.get('diarization_time', 0),
+                    "post_processing": result.get('post_processing_time', 0)
+                }
+            )
+        else:
+            # 处理失败情况
+            error_msg = result.get('error', "未知错误")
+            # 获取服务返回的错误码，如果没有则使用 ERROR_PROCESSING_FAILED
+            error_code = result.get('code', ERROR_PROCESSING_FAILED)
+            error_result = create_task_result(
+                status="failed",
+                task_id=task_id,
+                error=error_msg,
+                code=error_code,
+                timings={"total_time": time.time() - start_time}
+            )
+            
+            # 发送失败的MQTT通知
+            get_mqtt_service().send_transcription_complete(
+                task_id, 
+                code=error_code,
+                message=error_msg
+            )
+            
+            return error_result
+            
     except Exception as e:
-        logger.exception(f"处理转写任务失败: {task_id} - {str(e)}")
+        error_message = str(e)
+        logger.exception(f"处理转写任务失败: {task_id} - {error_message}")
+        
+        # 获取当前任务状态，以获取可能存在的错误码
+        current_task = transcription_service.get_task(task_id)
+        error_code = current_task.code if current_task else ERROR_PROCESSING_FAILED
+        
+        # 如果任务还存在但没有错误码，则使用 ERROR_PROCESSING_FAILED
+        if error_code == SUCCESS:
+            error_code = ERROR_PROCESSING_FAILED
+        
         # 更新任务状态为失败
         transcription_service.update_task(
             task_id,
             status="failed",
-            error_message=str(e),
-            code=1,
-            message=f"处理失败: {str(e)}"
+            error_message=error_message,
+            code=error_code,
+            message=get_error_message(error_code, error_message)
         )
-        return create_task_result(
+        
+        error_result = create_task_result(
             status="failed",
             task_id=task_id,
-            error=str(e),
+            error=error_message,
+            code=error_code,
             timings={
                 "task_received": time.time() - start_time,
                 "total_time": time.time() - start_time
             }
         )
-
-def process_task_sync(task_id: str, start_time: float):
-    """
-    同步处理转写任务
-    
-    Args:
-        task_id: 任务ID
-        start_time: 任务开始时间
-    
-    Returns:
-        dict: 包含处理结果的字典
-    """
-    # 记录任务接收时间
-    task_received_time = time.time() - start_time
-    
-    # 获取任务信息
-    task = transcription_service.get_task(task_id)
-    if not task:
-        logger.error(f"任务不存在: {task_id}")
-        return create_task_result(
-            status="failed",
-            task_id=task_id,
-            error="任务不存在",
-            timings={"task_received": task_received_time}
-        )
-    
-    # 检查文件是否存在
-    if not os.path.exists(task.file_path):
-        transcription_service.update_task(
-            task_id,
-            status="failed",
-            error_message="文件不存在",
-            code=1,
-            message="文件不存在"
-        )
-        logger.error(f"任务音频文件不存在: {task.file_path}")
-        return create_task_result(
-            status="failed",
-            task_id=task_id,
-            error="文件不存在",
-            timings={
-                "task_received": task_received_time,
-                "file_check": time.time() - start_time - task_received_time
-            }
-        )
-    
-    try:
-        # 执行原有的TranscriptionService.process_task的同步版本
-        result = transcription_service.process_task_sync(task_id)
         
-        if result['status'] == 'completed':
-            # 添加详细的时间信息
-            timings = {
-                "task_received": task_received_time,
-                "model_loading": result.get('model_loading_time', 0),
-                "transcription": result.get('transcription_time', 0),
-                "speaker_diarization": result.get('diarization_time', 0) if task.extra_params.speaker else 0,
-                "post_processing": result.get('post_processing_time', 0),
-                "total_time": time.time() - start_time
-            }
-            
-            return create_task_result(
-                status="completed",
-                task_id=task_id,
-                audio_duration=result.get('audio_duration', 0),
-                result=result.get('result', {}),
-                timings=timings
-            )
-        else:
-            return create_task_result(
-                status="failed",
-                task_id=task_id,
-                error=result.get('error', "未知错误"),
-                timings={
-                    "task_received": task_received_time,
-                    "total_time": time.time() - start_time
-                }
-            )
-            
-    except Exception as e:
-        logger.exception(f"处理任务失败: {task_id} - {str(e)}")
-        return create_task_result(
-            status="failed",
-            task_id=task_id,
-            error=str(e),
-            timings={
-                "task_received": task_received_time,
-                "total_time": time.time() - start_time
-            }
-        ) 
+        # 发送失败通知
+        get_mqtt_service().send_transcription_complete(
+            task_id, 
+            code=error_code,
+            message=error_message
+        )
+        
+        return error_result 

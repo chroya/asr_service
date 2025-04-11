@@ -71,6 +71,8 @@ class Settings():
 
     WHISPER_MODEL_NAME= "base" if DEBUG else os.getenv("WHISPER_MODEL_NAME", "base")
 
+    CLEAN_FILE_TIMEOUT= int(os.getenv("CLEAN_FILE_TIMEOUT", "12"))
+
     class Config:
         env_file = ".env"
         case_sensitive = True

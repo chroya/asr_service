@@ -66,7 +66,7 @@ def main():
         response = requests.post(server_url, files=files)
         
         # 解析响应
-        if response.status_code == 201:
+        if response.status_code == 200:
             result = response.json()
             print(f"成功创建转写任务! 任务ID: {result['task_id']}")
             print(f"状态: {result['status']}")

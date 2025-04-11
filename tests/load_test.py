@@ -166,7 +166,7 @@ async def send_upload_request(
             
             # 解析响应
             response_data = await response.json()
-            success = response.status == 201  # FastAPI创建资源成功状态码是201
+            success = response.status == 200  
             
             # 记录结果
             test_stats.add_result(success, response_time)

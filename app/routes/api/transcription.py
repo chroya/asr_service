@@ -47,7 +47,7 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
     #     if rate_limit_info.retry_after:
     #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
 
-@router.post("/uploadfile", status_code=status.HTTP_201_CREATED, response_model=SimplifiedTranscriptionTask)
+@router.post("/uploadfile", status_code=status.HTTP_200_OK, response_model=SimplifiedTranscriptionTask)
 async def create_transcription_task(
     request: Request,
     response: Response,
@@ -79,8 +79,8 @@ async def create_transcription_task(
         # 提取参数
         u_id = params.get("u_id")
         task_id = params.get("task_id")
-        # language = params.get("language", "auto")
-        language = "auto"  # 先忽略传上来的参数，默认自动检测语言
+        language = params.get("language", "auto")
+        # language = "auto"  # 先忽略传上来的参数，默认自动检测语言
         uuid_str = params.get("uuid")
         mode_id = params.get("mode_id")
         ai_mode = params.get("ai_mode")

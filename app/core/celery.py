@@ -19,7 +19,7 @@ celery_app.conf.update(
     task_acks_late=True,  # 任务完成后才确认任务已经完成
     task_reject_on_worker_lost=True,  # worker崩溃后，任务会被重新执行
     result_backend=f"redis://{':' + settings.REDIS_PASSWORD + '@' if settings.REDIS_PASSWORD else ''}{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY}",
-    imports=["app.tasks.transcription_tasks"],  # 直接导入任务模块
+    imports=["app.tasks.transcription_tasks", "app.tasks.cleanup_tasks"],  # 添加cleanup_tasks到导入列表
     broker_connection_retry_on_startup=True,  # 解决启动时的连接重试警告
 )
 
@@ -28,5 +28,8 @@ celery_app.autodiscover_tasks(["app.tasks"])
 
 # 定义Beat定时任务
 celery_app.conf.beat_schedule = {
-    # 可以在这里添加定期任务
+    'cleanup-old-files': {
+        'task': 'app.tasks.cleanup_tasks.cleanup_old_files',
+        'schedule': 3600.0,  # 每小时执行一次
+    },
 }

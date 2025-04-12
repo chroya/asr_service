@@ -59,6 +59,7 @@ class Settings():
     # 文件下载设置
     BASE_URL: str = os.getenv("BASE_URL", "http://150.109.15.121:8000")
     DOWNLOAD_URL_PREFIX: str = os.getenv("DOWNLOAD_URL_PREFIX", "/api/download")
+    UPLOAD_URL:str = os.getenv("UPLOAD_URL", BASE_URL+"/api/uploadfile")
     
     # Webhook设置
     WEBHOOK_TRANSCRIPTION_URL: str = os.getenv("WEBHOOK_TRANSCRIPTION_URL", "http://123.57.134.165/api/v1/webhook/transcription")

@@ -81,6 +81,7 @@ if __name__ == "__main__":
             "--loglevel=info",
             "-P", "prefork",
             "--concurrency", str(concurrency),
+            "--pool", "solo",
             "--time-limit", str(time_limit),
             "--max-tasks-per-child", str(max_tasks_per_child),
             "--without-gossip",

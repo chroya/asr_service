@@ -12,6 +12,10 @@ class Settings():
     APP_NAME: str = os.getenv("APP_NAME", "ASR Service")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
     
+    # JWT验证服务设置
+    JWT_VERIFY_URL: str = os.getenv("JWT_VERIFY_URL", "http://123.57.134.165/api/v1/file/verify")
+    JWT_VERIFY_TIMEOUT: int = int(os.getenv("JWT_VERIFY_TIMEOUT", "5"))  # 验证请求超时时间，单位：秒
+    
     # 移除用户认证相关密钥
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "default_secret_key_change_in_production")
     # ALGORITHM: str = os.getenv("ALGORITHM", "HS256")

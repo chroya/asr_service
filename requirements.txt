@@ -21,3 +21,4 @@ flower==2.0.1
 psutil==5.9.8
 requests==2.31.0
 hf_xet==1.0.2
+httpx==0.25.0

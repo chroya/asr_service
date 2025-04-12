@@ -2,7 +2,7 @@ import os
 import json
 import shutil
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response
+from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -21,6 +21,7 @@ from app.utils.error_codes import (
 from app.schemas.transcription import TranscriptionTask, RateLimitInfo, TranscriptionExtraParams, SimplifiedTranscriptionTask
 from app.tasks.transcription_tasks import process_transcription
 from app.utils.whisper_arch import ARCH_LIST
+from app.core.auth import jwt_auth_middleware
 
 router = APIRouter()
 
@@ -52,10 +53,14 @@ async def create_transcription_task(
     request: Request,
     response: Response,
     file: UploadFile = File(...),
-    extra_params: str = Form(...)  # 接收JSON字符串
+    extra_params: str = Form(...),
+    _: bool = Depends(jwt_auth_middleware)  # 添加JWT鉴权
 ):
     """
     创建一个新的转写任务
+    
+    需要在请求头中提供有效的JWT令牌：
+    Authorization: Bearer <your_jwt_token>
     
     参数:
         file: 要转写的音频文件
@@ -257,9 +262,17 @@ async def get_task(task_id: str, request: Request, response: Response):
     return simplified_task
 
 @router.get("/download/{task_id}", response_class=Response)
-async def download_result_file(task_id: str, request: Request, response: Response):
+async def download_result_file(
+    task_id: str,
+    request: Request,
+    response: Response,
+    _: bool = Depends(jwt_auth_middleware)  # 添加JWT鉴权
+):
     """
     通过任务ID和文件名下载转写结果文件
+    
+    需要在请求头中提供有效的JWT令牌：
+    Authorization: Bearer <your_jwt_token>
     """
     filename = f"{task_id}.json"
     # 构建文件路径

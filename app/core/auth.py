@@ -20,6 +20,10 @@ async def verify_jwt(request: Request, auth: HTTPAuthorizationCredentials = None
     Raises:
         HTTPException: 当验证失败时抛出相应的异常
     """
+    # 如果禁用了JWT鉴权，直接返回True
+    if not settings.JWT_AUTH_ENABLED:
+        return True
+        
     if not auth:
         raise HTTPException(status_code=401, detail="未提供认证信息")
     
@@ -72,6 +76,10 @@ async def jwt_auth_middleware(request: Request):
     """
     JWT认证中间件
     """
+    # 如果禁用了JWT鉴权，直接返回True
+    if not settings.JWT_AUTH_ENABLED:
+        return True
+        
     # 从请求头中获取认证信息
     auth_header = request.headers.get("Authorization")
     if not auth_header:

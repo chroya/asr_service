@@ -42,11 +42,12 @@ class TranscriptionService:
         client_id: str,
         language: Optional[str] = None,
         u_id: Optional[int] = None,
-        uuid: Optional[str] = None,
         mode_id: Optional[int] = None,
         ai_mode: Optional[str] = None,
         speaker: bool = False,
-        whisper_arch: str = settings.WHISPER_MODEL_NAME
+        whisper_arch: str = settings.WHISPER_MODEL_NAME,
+        content_id: Optional[str] = None,
+        server_id: Optional[str] = None
     ) -> TranscriptionTask:
         """
         创建新的转写任务
@@ -59,11 +60,12 @@ class TranscriptionService:
             client_id: 客户端ID
             language: 音频语言代码（可选）
             u_id: 用户ID
-            uuid: 唯一标识符
             mode_id: 模板ID
             ai_mode: AI模式
             speaker: 是否启用说话人分离
             whisper_arch: Whisper架构
+            content_id: 内容ID
+            server_id: 服务器ID
             
         Returns:
             TranscriptionTask: 创建的任务信息
@@ -72,13 +74,14 @@ class TranscriptionService:
         extra_params = TranscriptionExtraParams(
             u_id=u_id,
             record_file_name=original_filename,
-            uuid=uuid,
             task_id=task_id,
             mode_id=mode_id,
             language=language or "auto",
             ai_mode=ai_mode,
             speaker=speaker,
-            whisper_arch=whisper_arch
+            whisper_arch=whisper_arch,
+            content_id=content_id,
+            server_id=server_id
         )
         
         # 创建任务数据
@@ -93,7 +96,7 @@ class TranscriptionService:
             created_at=datetime.now().isoformat(),
             extra_params=extra_params.dict() if extra_params else None,
             code=SUCCESS,  # 创建任务时设置为成功状态
-            message=get_error_message(SUCCESS),  # 没有错误信息
+            message=get_error_message(SUCCESS)  # 没有错误信息
         )
         
         # 存储任务数据

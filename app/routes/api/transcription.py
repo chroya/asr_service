@@ -63,13 +63,14 @@ async def create_transcription_task(
             {
                 "u_id": 用户ID (必须),
                 "record_file_name": 文件名,
-                "uuid": 唯一标识符(必须),
                 "task_id": 任务ID(必须),
                 "mode_id": 模型ID(必须),
                 "language": 语言代码,
                 "ai_mode": AI模式(必须),
                 "speaker": 是否启用说话人分离(布尔值),
-                "whisper_arch": whisper模型名,具体见 whisper_arch.py
+                "whisper_arch": whisper模型名,具体见 whisper_arch.py,
+                "content_id": 内容ID,
+                "server_id": 服务器ID
             }
     """
     try:
@@ -80,18 +81,23 @@ async def create_transcription_task(
         u_id = params.get("u_id")
         task_id = params.get("task_id")
         language = params.get("language", "auto")
-        # language = "auto"  # 先忽略传上来的参数，默认自动检测语言
-        uuid_str = params.get("uuid")
         mode_id = params.get("mode_id")
         ai_mode = params.get("ai_mode")
         speaker = params.get("speaker", False)
         whisper_arch = params.get("whisper_arch")
+        content_id = params.get("content_id")
+        server_id = params.get("server_id")
+        
         if whisper_arch not in ARCH_LIST:
             whisper_arch = settings.WHISPER_MODEL_NAME
         
         # 验证必须的参数
-        if not all([u_id, task_id, uuid_str, mode_id, ai_mode]):
+        if not all([u_id, task_id, mode_id, ai_mode]):
             raise ValueError("缺少必要的参数")
+        
+        # 生成 server_id
+        server_id = settings.SERVER_ID
+        
     except (json.JSONDecodeError, ValueError) as e:
         error_response = SimplifiedTranscriptionTask(
             task_id=task_id if 'task_id' in locals() else "unknown",
@@ -100,7 +106,19 @@ async def create_transcription_task(
             file_path="",
             created_at=datetime.now().isoformat(),
             code=ERROR_PROCESSING_FAILED,
-            message=f"解析参数失败: {str(e)}"
+            message=f"解析参数失败: {str(e)}",
+            extra_params=TranscriptionExtraParams(
+                u_id=u_id if 'u_id' in locals() else 0,
+                record_file_name=file.filename,
+                task_id=task_id if 'task_id' in locals() else "unknown",
+                mode_id=mode_id if 'mode_id' in locals() else 0,
+                language=language if 'language' in locals() else "unknown",
+                ai_mode=ai_mode if 'ai_mode' in locals() else "unknown",
+                speaker=speaker if 'speaker' in locals() else False,
+                whisper_arch=whisper_arch if 'whisper_arch' in locals() else "unknown",
+                content_id=content_id if 'content_id' in locals() else "unknown",
+                server_id=server_id if 'server_id' in locals() else "unknown"
+            )
         )
         response.status_code = status.HTTP_400_BAD_REQUEST
         return error_response
@@ -114,7 +132,19 @@ async def create_transcription_task(
             file_path="",
             created_at=datetime.now().isoformat(),
             code=ERROR_INVALID_FILE_FORMAT,
-            message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT]
+            message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT],
+            extra_params=TranscriptionExtraParams(
+                u_id=u_id,
+                record_file_name=file.filename,
+                task_id=task_id,
+                mode_id=mode_id,
+                language=language,
+                ai_mode=ai_mode,
+                speaker=speaker,
+                whisper_arch=whisper_arch,
+                content_id=content_id,
+                server_id=server_id
+            )
         )
         response.status_code = status.HTTP_400_BAD_REQUEST
         return error_response
@@ -129,7 +159,19 @@ async def create_transcription_task(
             file_path="",
             created_at=datetime.now().isoformat(),
             code=ERROR_FILE_TOO_LARGE,
-            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE}MB"
+            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE}MB",
+            extra_params=TranscriptionExtraParams(
+                u_id=u_id,
+                record_file_name=file.filename,
+                task_id=task_id,
+                mode_id=mode_id,
+                language=language,
+                ai_mode=ai_mode,
+                speaker=speaker,
+                whisper_arch=whisper_arch,
+                content_id=content_id,
+                server_id=server_id
+            )
         )
         response.status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
         return error_response
@@ -151,11 +193,12 @@ async def create_transcription_task(
         client_id=client_id,
         language=language,
         u_id=u_id,
-        uuid=uuid_str,
         mode_id=mode_id,
         ai_mode=ai_mode,
         speaker=speaker,
-        whisper_arch=whisper_arch
+        whisper_arch=whisper_arch,
+        content_id=content_id,
+        server_id=server_id
     )
     
     # 将任务添加到Celery队列

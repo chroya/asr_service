@@ -24,13 +24,14 @@ class TranscriptionExtraParams(BaseModel):
     """
     u_id: int = Field(..., description="用户唯一标识ID")
     record_file_name: str = Field(..., description="录音文件名")
-    uuid: str = Field(..., description="任务的唯一UUID，用于关联后续操作")
     task_id: str = Field(..., description="任务ID，格式为 UID:{用户ID}_文件前2MB内容的MD5")
     mode_id: int = Field(..., description="使用的模板ID（提示词模板）")
     language: str = Field(..., description="语言")
     ai_mode: str = Field(..., description="使用的AI模式（如 GPT-4o）")
     speaker: bool = Field(..., description="是否启用说话人分离")
     whisper_arch: str = Field(..., description="使用的Whisper模型名")
+    content_id: str = Field(..., description="内容ID")
+    server_id: str = Field(..., description="服务器ID")
 
 class TranscriptionTask(BaseModel):
     """
@@ -54,7 +55,7 @@ class TranscriptionTask(BaseModel):
     extra_params: Optional[TranscriptionExtraParams] = Field(None, description="额外参数")
     code: int = Field(0, description="状态码：0表示成功，其他值表示失败")
     message: str = Field("", description="状态消息，成功时为空，失败时为错误信息")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -75,12 +76,13 @@ class TranscriptionTask(BaseModel):
                 "extra_params": {
                     "u_id": 12345,
                     "record_file_name": "会议记录.mp3",
-                    "uuid": "abc123-def456-ghi789",
                     "task_id": "UID:12345_a1b2c3d4e5f6",
                     "mode_id": 1,
                     "language": "zh",
                     "ai_mode": "GPT-4o",
-                    "speaker": True
+                    "speaker": True,
+                    "content_id": "abc123-def456-ghi789",
+                    "server_id": "some-server-id"
                 }
             }
         }
@@ -98,7 +100,7 @@ class SimplifiedTranscriptionTask(BaseModel):
     extra_params: Optional[TranscriptionExtraParams] = Field(None, description="额外参数")
     code: int = Field(0, description="状态码：0表示成功，其他值表示失败")
     message: str = Field("", description="状态消息，成功时为空，失败时为错误信息")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -112,12 +114,13 @@ class SimplifiedTranscriptionTask(BaseModel):
                 "extra_params": {
                     "u_id": 12345,
                     "record_file_name": "会议记录.mp3",
-                    "uuid": "abc123-def456-ghi789",
                     "task_id": "UID:12345_a1b2c3d4e5f6",
                     "mode_id": 1,
                     "language": "zh",
                     "ai_mode": "GPT-4o",
-                    "speaker": True
+                    "speaker": True,
+                    "content_id": "abc123-def456-ghi789",
+                    "server_id": "some-server-id"
                 }
             }
         }

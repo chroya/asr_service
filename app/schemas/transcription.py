@@ -38,7 +38,7 @@ class TranscriptionTask(BaseModel):
     转写任务详情
     """
     task_id: str = Field(..., description="任务ID")
-    client_id: str = Field(..., description="客户端ID")
+    client_id: Optional[str] = Field(None, description="客户端ID")
     status: str = Field(..., description="任务状态：pending, processing, completed, failed")
     filename: str = Field(..., description="原始文件名")
     file_path: str = Field(..., description="文件存储路径")

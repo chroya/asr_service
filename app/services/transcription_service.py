@@ -178,36 +178,6 @@ class TranscriptionService:
         
         return True
     
-    def get_client_tasks(self, client_id: str, limit: int = 10, offset: int = 0) -> List[TranscriptionTask]:
-        """
-        获取客户端的任务列表
-        
-        Args:
-            client_id: 客户端ID
-            limit: 返回的最大任务数量
-            offset: 偏移量
-            
-        Returns:
-            List[TranscriptionTask]: 任务列表
-        """
-        # 获取客户端的任务ID列表
-        task_ids = self.storage.get_keys("") or []
-        
-        # 分页
-        task_ids = task_ids[offset:offset + limit]
-        
-        # 获取每个任务的详细信息
-        tasks = []
-        for task_id in task_ids:
-            task = self.get_task(task_id)
-            if task:
-                tasks.append(task)
-        
-        # 按创建时间倒序排序
-        tasks.sort(key=lambda x: x.created_at, reverse=True)
-        
-        return tasks
-    
     def reset_task(self, task_id: str) -> Optional[TranscriptionTask]:
         """
         重置任务状态，准备重新处理

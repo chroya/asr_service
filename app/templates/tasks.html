@@ -8,9 +8,9 @@
     
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="show-my-tasks" checked>
-            <label class="form-check-label" for="show-my-tasks">
-                仅显示当前设备的任务
+            <input class="form-check-input" type="checkbox" id="auto-refresh" checked>
+            <label class="form-check-label" for="auto-refresh">
+                自动刷新（每30秒）
             </label>
         </div>
         <a href="/web/transcribe" class="btn btn-primary">
@@ -41,6 +41,8 @@
             </div>
             <div id="pagination" class="d-flex justify-content-center mt-3">
                 <!-- 分页控件 -->
+                <button id="prevPage" class="btn btn-secondary me-2" disabled>上一页</button>
+                <button id="nextPage" class="btn btn-secondary">下一页</button>
             </div>
         </div>
     </div>
@@ -92,159 +94,157 @@
 {% block extra_js %}
 <script>
     let currentTaskId = null;
-    
-    // 获取客户端ID或创建新的
-    function getClientId() {
-        let clientId = localStorage.getItem('client_id');
-        if (!clientId) {
-            // 生成随机UUID
-            clientId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                const r = Math.random() * 16 | 0;
-                const v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-            localStorage.setItem('client_id', clientId);
-        }
-        return clientId;
-    }
+    let refreshInterval = null;
     
     // 页面加载完成时
     document.addEventListener('DOMContentLoaded', function() {
-        // 确保有客户端ID
-        getClientId();
-        
         // 加载任务列表
         loadTasks();
         
-        // 设置仅显示我的任务复选框事件
-        document.getElementById('show-my-tasks').addEventListener('change', loadTasks);
+        // 设置自动刷新
+        setupAutoRefresh();
+        
+        // 设置自动刷新复选框事件
+        const autoRefreshCheckbox = document.getElementById('auto-refresh');
+        if (autoRefreshCheckbox) {
+            autoRefreshCheckbox.addEventListener('change', function(e) {
+                if (e.target.checked) {
+                    setupAutoRefresh();
+                } else {
+                    clearInterval(refreshInterval);
+                }
+            });
+        }
     });
     
+    // 设置自动刷新
+    function setupAutoRefresh() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+        refreshInterval = setInterval(loadTasks, 30000); // 每30秒刷新一次
+    }
+    
     // 加载任务列表
-    function loadTasks(offset = 0, limit = 10) {
+    function loadTasks(offset) {
+        // 确保 offset 是数字类型
+        const pageOffset = typeof offset === 'number' ? offset : 0;
+        const pageLimit = 10;
+        
         const tasksListEl = document.getElementById('tasks-list');
-        const showMyTasks = document.getElementById('show-my-tasks').checked;
         
         tasksListEl.innerHTML = '<tr><td colspan="6" class="text-center">加载中...</td></tr>';
         
-        let url = `/api/tasks/?offset=${offset}&limit=${limit}`;
-        if (showMyTasks) {
-            const clientId = getClientId();
-            url += `&client_id=${clientId}`;
-        }
-        
-        fetch(url)
+        fetch(`/api/tasks?offset=${pageOffset}&limit=${pageLimit}`)
         .then(response => {
             if (response.ok) {
                 return response.json();
             } else {
-                throw new Error('获取任务列表失败');
+                return response.json().then(data => {
+                    throw new Error(data.detail?.[0]?.msg || '获取任务列表失败');
+                });
             }
         })
         .then(data => {
-            if (data.length === 0) {
+            console.log('任务列表数据:', data);  // 添加日志
+            if (Array.isArray(data) && data.length > 0) {
+                let html = '';
+                data.forEach(task => {
+                    const createdAt = new Date(task.created_at).toLocaleString();
+                    let audioDuration = task.audio_duration ? `${task.audio_duration.toFixed(1)}秒` : '-';
+                    let statusBadge = '';
+                    
+                    // 根据状态设置不同的徽章样式
+                    switch(task.status) {
+                        case 'pending':
+                            statusBadge = '<span class="badge bg-warning">等待中</span>';
+                            break;
+                        case 'processing':
+                            statusBadge = '<span class="badge bg-primary">处理中</span>';
+                            break;
+                        case 'completed':
+                            statusBadge = '<span class="badge bg-success">已完成</span>';
+                            break;
+                        case 'failed':
+                            statusBadge = '<span class="badge bg-danger">失败</span>';
+                            break;
+                        default:
+                            statusBadge = `<span class="badge bg-secondary">${task.status}</span>`;
+                    }
+                    
+                    // 根据状态决定可用的操作
+                    let actions = '';
+                    if (task.status === 'completed') {
+                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.task_id}'">查看详情</button>`;
+                        actions += `<button class="btn btn-sm btn-success me-1" onclick="downloadResult('${task.task_id}')">下载结果</button>`;
+                    } else if (task.status === 'failed') {
+                        actions = `<button class="btn btn-sm btn-warning me-1" onclick="retryTask('${task.task_id}')">重试</button>`;
+                    }
+                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteTask('${task.task_id}')">删除</button>`;
+                    
+                    html += `
+                    <tr>
+                        <td>${task.task_id}</td>
+                        <td>${task.filename}</td>
+                        <td>${statusBadge}</td>
+                        <td>${createdAt}</td>
+                        <td>${audioDuration}</td>
+                        <td>${actions}</td>
+                    </tr>
+                    `;
+                });
+                
+                tasksListEl.innerHTML = html;
+                
+                // 更新分页按钮状态
+                const prevPageBtn = document.getElementById('prevPage');
+                const nextPageBtn = document.getElementById('nextPage');
+                if (prevPageBtn) prevPageBtn.disabled = pageOffset === 0;
+                if (nextPageBtn) nextPageBtn.disabled = data.length < pageLimit;
+                
+                // 更新当前页码
+                tasksListEl.setAttribute('data-offset', String(pageOffset));
+            } else {
                 tasksListEl.innerHTML = '<tr><td colspan="6" class="text-center">暂无转写任务</td></tr>';
-                return;
             }
-            
-            let html = '';
-            data.forEach(task => {
-                const createdAt = new Date(task.created_at).toLocaleString();
-                let audioDuration = task.audio_duration ? `${task.audio_duration.toFixed(1)}秒` : '-';
-                let statusBadge = '';
-                
-                // 根据状态设置不同的徽章样式
-                switch(task.status) {
-                    case 'pending':
-                        statusBadge = '<span class="badge bg-warning">等待中</span>';
-                        break;
-                    case 'processing':
-                        statusBadge = '<span class="badge bg-primary">处理中</span>';
-                        break;
-                    case 'completed':
-                        statusBadge = '<span class="badge bg-success">已完成</span>';
-                        break;
-                    case 'failed':
-                        statusBadge = '<span class="badge bg-danger">失败</span>';
-                        break;
-                    default:
-                        statusBadge = `<span class="badge bg-secondary">${task.status}</span>`;
-                }
-                
-                // 根据状态决定可用的操作
-                let actions = '';
-                if (task.status === 'completed') {
-                    actions = `<button class="btn btn-sm btn-info" onclick="viewResult('${task.task_id}')">查看结果</button> `;
-                }
-                actions += `<button class="btn btn-sm btn-danger" onclick="deleteTask('${task.task_id}')">删除</button>`;
-                
-                html += `
-                <tr>
-                    <td>${task.task_id.substring(0, 8)}...</td>
-                    <td>${task.original_filename}</td>
-                    <td>${statusBadge}</td>
-                    <td>${createdAt}</td>
-                    <td>${audioDuration}</td>
-                    <td>${actions}</td>
-                </tr>
-                `;
-            });
-            
-            tasksListEl.innerHTML = html;
         })
         .catch(error => {
+            console.error('Error loading tasks:', error);
             tasksListEl.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${error.message}</td></tr>`;
         });
     }
     
-    // 查看转写结果
-    function viewResult(taskId) {
-        currentTaskId = taskId;
-        const resultTextEl = document.getElementById('result-text');
-        const resultSegmentsEl = document.getElementById('result-segments');
+    // 下载结果
+    function downloadResult(taskId) {
+        window.open(`/api/download/${taskId}`, '_blank');
+    }
+    
+    // 重试任务
+    function retryTask(taskId) {
+        if (!confirm('确定要重试此任务吗？')) {
+            return;
+        }
         
-        // 重置模态框内容
-        resultTextEl.innerHTML = '加载中...';
-        resultSegmentsEl.innerHTML = '<tr><td colspan="3" class="text-center">加载中...</td></tr>';
+        showLoading();
         
-        // 显示模态框
-        new bootstrap.Modal(document.getElementById('resultModal')).show();
-        
-        // 获取结果
-        fetch(`/api/uploadfile/${taskId}/result`)
+        fetch(`/api/task/${taskId}/retry`, {
+            method: 'POST'
+        })
         .then(response => {
             if (response.ok) {
-                return response.json();
+                showToast('任务已重新提交处理', 'success');
+                loadTasks();
             } else {
-                throw new Error('获取转写结果失败');
-            }
-        })
-        .then(data => {
-            // 显示完整文本
-            resultTextEl.innerHTML = data.text || '无文本内容';
-            
-            // 显示分段信息
-            if (data.segments && data.segments.length > 0) {
-                let segmentsHtml = '';
-                data.segments.forEach(segment => {
-                    const startTime = formatTime(segment.start);
-                    const endTime = formatTime(segment.end);
-                    segmentsHtml += `
-                    <tr>
-                        <td>${startTime}</td>
-                        <td>${endTime}</td>
-                        <td>${segment.text}</td>
-                    </tr>
-                    `;
+                return response.json().then(data => {
+                    throw new Error(data.detail || '重试任务失败');
                 });
-                resultSegmentsEl.innerHTML = segmentsHtml;
-            } else {
-                resultSegmentsEl.innerHTML = '<tr><td colspan="3" class="text-center">无分段信息</td></tr>';
             }
         })
         .catch(error => {
-            resultTextEl.innerHTML = `<span class="text-danger">${error.message}</span>`;
-            resultSegmentsEl.innerHTML = '<tr><td colspan="3" class="text-center text-danger">加载失败</td></tr>';
+            showToast(error.message, 'error');
+        })
+        .finally(() => {
+            hideLoading();
         });
     }
     
@@ -256,14 +256,13 @@
         
         showLoading();
         
-        fetch(`/api/uploadfile/${taskId}`, {
+        fetch(`/api/task/${taskId}`, {
             method: 'DELETE'
         })
         .then(response => {
             if (response.ok) {
-                hideLoading();
                 showToast('任务已成功删除', 'success');
-                loadTasks(); // 重新加载任务列表
+                loadTasks();
             } else {
                 return response.json().then(data => {
                     throw new Error(data.detail || '删除任务失败');
@@ -271,50 +270,33 @@
             }
         })
         .catch(error => {
-            hideLoading();
-            showToast(error.message, 'danger');
-        });
-    }
-    
-    // 格式化时间（秒 -> 分:秒）
-    function formatTime(seconds) {
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    }
-    
-    // 下载结果
-    document.getElementById('download-result').addEventListener('click', function() {
-        if (!currentTaskId) return;
-        
-        fetch(`/api/uploadfile/${currentTaskId}/result`)
-        .then(response => response.json())
-        .then(data => {
-            // 创建文本内容
-            let content = `# 转写结果 - ${currentTaskId}\n\n`;
-            content += `## 完整文本\n\n${data.text}\n\n`;
-            content += `## 分段信息\n\n`;
-            
-            if (data.segments && data.segments.length > 0) {
-                data.segments.forEach(segment => {
-                    const startTime = formatTime(segment.start);
-                    const endTime = formatTime(segment.end);
-                    content += `[${startTime} - ${endTime}] ${segment.text}\n`;
-                });
-            }
-            
-            // 创建下载链接
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${currentTaskId}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
+            showToast(error.message, 'error');
         })
-        .catch(error => {
-            showToast('下载失败: ' + error.message, 'danger');
+        .finally(() => {
+            hideLoading();
         });
-    });
+    }
+
+    // 更新分页事件处理
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    
+    if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', () => {
+            const currentOffset = parseInt(document.getElementById('tasks-list').getAttribute('data-offset') || '0');
+            if (currentOffset > 0) {
+                loadTasks(currentOffset - 10);
+                document.getElementById('tasks-list').setAttribute('data-offset', String(currentOffset - 10));
+            }
+        });
+    }
+
+    if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', () => {
+            const currentOffset = parseInt(document.getElementById('tasks-list').getAttribute('data-offset') || '0');
+            loadTasks(currentOffset + 10);
+            document.getElementById('tasks-list').setAttribute('data-offset', String(currentOffset + 10));
+        });
+    }
 </script>
 {% endblock %} 

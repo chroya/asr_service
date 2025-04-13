@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
     
     @app.get("/demo", response_class=RedirectResponse)
     async def demo():
-        return "/static/upload_demo.html"
+        return "/web/transcribe"
     
     # 记录应用启动日志
     logger.info(f"{settings.APP_NAME} 应用已启动")

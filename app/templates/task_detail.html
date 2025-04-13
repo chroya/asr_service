@@ -20,11 +20,13 @@
                     <p><strong>任务ID:</strong> <span id="task-id"></span></p>
                     <p><strong>文件名:</strong> <span id="filename"></span></p>
                     <p><strong>创建时间:</strong> <span id="created-at"></span></p>
+                    <p><strong>完成时间:</strong> <span id="completed-at">-</span></p>
                 </div>
                 <div class="col-md-6">
                     <p><strong>状态:</strong> <span id="status-badge"></span></p>
-                    <p><strong>音频时长:</strong> <span id="audio-duration"></span></p>
-                    <p><strong>语言:</strong> <span id="language"></span></p>
+                    <p><strong>音频时长:</strong> <span id="audio-duration">-</span></p>
+                    <p><strong>处理耗时:</strong> <span id="processing-time">-</span></p>
+                    <p><strong>请求语言:</strong> <span id="language"></span></p>
                 </div>
             </div>
         </div>
@@ -146,13 +148,15 @@
                     // 填充基本信息
                     document.getElementById('filename').textContent = data.filename || '未知';
                     document.getElementById('created-at').textContent = formatDate(data.created_at);
+                    document.getElementById('completed-at').textContent = data.completed_at ? formatDate(data.completed_at) : '-';
                     
                     // 使用extra_params
                     const extraParams = data.extra_params || {};
                     document.getElementById('language').textContent = formatLanguage(extraParams.language);
                     
-                    // 音频时长不再直接可用，设为未知
-                    document.getElementById('audio-duration').textContent = '处理中';
+                    // 更新音频时长和处理耗时
+                    document.getElementById('audio-duration').textContent = data.audio_duration ? formatDuration(data.audio_duration) : '-';
+                    document.getElementById('processing-time').textContent = data.processing_time ? formatDuration(data.processing_time) : '-';
                     
                     // 根据code判断状态
                     let status;
@@ -235,17 +239,23 @@
         // 显示已完成的UI
         function showCompletedUI(data) {
             // 隐藏进度和错误卡片
-            document.getElementById('progress-card').classList.add('d-none');
-            document.getElementById('error-card').classList.add('d-none');
+            const progressCard = document.getElementById('progress-card');
+            const errorCard = document.getElementById('error-card');
+            if (progressCard) progressCard.classList.add('d-none');
+            if (errorCard) errorCard.classList.add('d-none');
             
             // 显示结果卡片
             const resultCard = document.getElementById('result-card');
+            if (!resultCard) return;
             resultCard.classList.remove('d-none');
             
             // 设置下载按钮事件
-            document.getElementById('download-btn').onclick = function() {
-                window.open(`/api/download/${data.task_id}`, '_blank');
-            };
+            const downloadBtn = document.getElementById('download-btn');
+            if (downloadBtn) {
+                downloadBtn.onclick = function() {
+                    window.open(`/api/download/${data.task_id}`, '_blank');
+                };
+            }
             
             // 获取结果数据
             fetch(`/api/download/${data.task_id}`)
@@ -262,11 +272,11 @@
                     }
                     
                     // 更新音频时长
-                    const lastSegment = segments[segments.length - 1];
-                    if (lastSegment.end) {
-                        const endTime = parseFloat(lastSegment.end.split(':').pop());
-                        document.getElementById('audio-duration').textContent = formatDuration(endTime);
-                    }
+                    // const lastSegment = segments[segments.length - 1];
+                    // if (lastSegment.end) {
+                    //     const endTime = parseFloat(lastSegment.end.split(':').pop());
+                    //     document.getElementById('audio-duration').textContent = formatDuration(endTime);
+                    // }
                     
                     // 构建完整文本
                     let fullText = '';
@@ -301,19 +311,28 @@
         // 设置按钮事件
         function setupButtons(taskId) {
             // 下载结果按钮
-            document.getElementById('download-btn').addEventListener('click', function() {
-                downloadResults(taskId);
-            });
+            const downloadBtn = document.getElementById('download-btn');
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', function() {
+                    downloadResults(taskId);
+                });
+            }
             
             // 重试按钮
-            document.getElementById('retry-btn').addEventListener('click', function() {
-                retryTask(taskId);
-            });
+            const retryBtn = document.getElementById('retry-btn');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', function() {
+                    retryTask(taskId);
+                });
+            }
             
             // 删除按钮
-            document.getElementById('delete-btn').addEventListener('click', function() {
-                deleteTask(taskId);
-            });
+            const deleteBtn = document.getElementById('delete-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', function() {
+                    deleteTask(taskId);
+                });
+            }
         }
         
         // 下载结果
@@ -432,21 +451,32 @@
         
         // 辅助函数 - 格式化时长
         function formatDuration(seconds) {
-            if (!seconds && seconds !== 0) return '未知';
+            if (!seconds || seconds <= 0) return '-';
+            
+            // 1秒内才保留两位小数，超过1秒不保留
+            var decimal = seconds < 1 ? 2 : 0; 
+
+            // 四舍五入到2位小数
+            if (decimal > 0) {
+                seconds = Math.round(seconds * 100) / 100;
+            } else {
+                seconds = Math.round(seconds);
+            }
             
             const hours = Math.floor(seconds / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
-            const remainingSeconds = Math.round(seconds % 60);
+            const remainingSeconds = (seconds % 60).toFixed(2);
             
             let result = '';
-            if (hours > 0) {
-                result += `${hours}小时 `;
+            if (hours > 0) result += `${hours}小时`;
+            if (minutes > 0) result += `${minutes}分`;
+            if (parseFloat(remainingSeconds) > 0 || !result) {
+                // 如果秒数是整数，不显示小数点后的零
+                const displaySeconds = parseFloat(remainingSeconds) === Math.floor(parseFloat(remainingSeconds)) 
+                    ? Math.floor(parseFloat(remainingSeconds))
+                    : parseFloat(remainingSeconds);
+                result += `${displaySeconds}秒`;
             }
-            if (minutes > 0 || hours > 0) {
-                result += `${minutes}分钟 `;
-            }
-            result += `${remainingSeconds}秒`;
-            
             return result;
         }
         

@@ -36,6 +36,20 @@
                 </div>
                 
                 <div class="mb-3">
+                    <label for="whisper-arch" class="form-label">Whisper 模型 (可选)</label>
+                    <select class="form-select" id="whisper-arch" name="whisper_arch">
+                        <option value="">默认模型</option>
+                        <option value="tiny">Tiny (最快，准确度较低)</option>
+                        <option value="base">Base (较快，准确度一般)</option>
+                        <option value="small">Small (平衡速度和准确度)</option>
+                        <option value="medium">Medium (较慢，准确度较高)</option>
+                        <option value="large-v3">Large-v3 (最慢，准确度最高)</option>
+                        <option value="large-v3-turbo">Large-v3-turbo (比large v3速度快，准确度略降)</option>
+                    </select>
+                    <div class="form-text">选择不同大小的模型会影响转写速度和准确度，如不确定请使用默认模型</div>
+                </div>
+                
+                <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="speaker-diarization">
                         <label class="form-check-label" for="speaker-diarization">
@@ -111,7 +125,6 @@
     function getClientId() {
         let clientId = localStorage.getItem('client_id');
         if (!clientId) {
-            // 生成随机UUID
             clientId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
                 const r = Math.random() * 16 | 0;
                 const v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -122,9 +135,11 @@
         return clientId;
     }
     
-    // 生成MD5哈希 (简化版)
-    function generateTaskId(str) {
-        return 'task_' + Math.random().toString(36).substring(2, 15);
+    // 生成任务ID
+    function generateTaskId(fileName) {
+        const timestamp = new Date().getTime();
+        const random = Math.random().toString(36).substring(2, 8);
+        return `task_${timestamp}_${random}`;
     }
     
     // 初始化表单
@@ -137,16 +152,19 @@
         const errorCard = document.getElementById('error-card');
         const retryBtn = document.getElementById('retry-btn');
         
+        console.log('表单初始化完成，已获取所有必要元素');
+        
         // 提交表单
         uploadForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            console.log('表单提交开始');
             
             // 显示提交状态
             submitBtn.disabled = true;
             spinner.classList.remove('d-none');
             btnText.textContent = '处理中...';
             
-            // 隐藏结果卡片
+            // 隐藏结果和错误卡片
             successCard.classList.add('d-none');
             errorCard.classList.add('d-none');
             
@@ -155,85 +173,116 @@
             const fileInput = document.getElementById('audioFile');
             const languageInput = document.getElementById('language');
             const speakerDiarization = document.getElementById('speaker-diarization').checked;
+            const whisperArchSelect = document.getElementById('whisper-arch');
+            
+            console.log('表单元素状态:', {
+                '文件是否选择': fileInput.files.length > 0,
+                '文件名': fileInput.files[0]?.name,
+                '文件大小': fileInput.files[0]?.size,
+                '选择的语言': languageInput.value,
+                '说话人分离': speakerDiarization,
+                'Whisper模型': whisperArchSelect?.value
+            });
             
             // 添加文件
             if (!fileInput.files[0]) {
-                showError("请选择音频文件");
+                console.error('未选择文件');
+                showError('请选择音频文件');
+                resetButtonState();
                 return;
             }
             formData.append('file', fileInput.files[0]);
             
-            // 准备额外参数对象
+            // 准备必需参数
             const clientId = getClientId();
-            const uuid = clientId;
             const fileName = fileInput.files[0].name;
             const taskId = generateTaskId(fileName);
-            const u_id = 111; // 默认用户ID
+            currentTaskId = taskId;
             
+            // 构建extra_params对象
             const extraParams = {
-                u_id: u_id,
-                record_file_name: fileName,
-                uuid: uuid,
-                task_id: taskId,
-                mode_id: 10001, // 默认模式ID
-                language: languageInput.value || "auto",
-                ai_mode: "GPT-4o", // 默认AI模式
-                speaker: speakerDiarization
+                u_id: 123,                    // 必需：用户ID
+                task_id: taskId,                   // 必需：任务ID
+                mode_id: 10001,                    // 必需：模型ID（使用默认值）
+                ai_mode: "GPT-4",                  // 必需：AI模式
+                
+                // 可选参数
+                record_file_name: fileName,        // 可选：原始文件名
+                language: languageInput.value || "auto", // 可选：语言，默认auto
+                speaker: speakerDiarization,       // 可选：说话人分离
+                whisper_arch: whisperArchSelect?.value || "", // 可选：whisper模型，空字符串表示使用默认模型
+                content_id: "",                    // 可选：内容ID
+                server_id: ""                      // 可选：服务器ID（由后端设置）
             };
             
-            // 将额外参数转换为JSON字符串并添加到表单
+            console.log('构建的请求参数:', {
+                extraParams: extraParams,
+                formDataEntries: Array.from(formData.entries()).map(([key, value]) => {
+                    return {
+                        key: key,
+                        value: value instanceof File ? {
+                            name: value.name,
+                            size: value.size,
+                            type: value.type
+                        } : value
+                    };
+                })
+            });
+            
+            // 将额外参数转换为JSON字符串
             formData.append('extra_params', JSON.stringify(extraParams));
             
             // 发送请求
+            console.log('开始发送请求到:', '/api/uploadfile');
             fetch('/api/uploadfile', {
                 method: 'POST',
                 body: formData
             })
             .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
+                console.log('收到响应:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+                
+                if (!response.ok) {
                     return response.json().then(data => {
-                        throw new Error(data.message || '创建任务失败');
+                        console.error('请求失败:', data);
+                        throw new Error(data.message || '上传失败');
                     });
                 }
+                return response.json();
             })
             .then(data => {
-                // 显示成功消息
-                document.getElementById('task-id').textContent = data.task_id;
-                document.getElementById('task-detail-link').href = `/web/task/${data.task_id}`;
-                successCard.classList.remove('d-none');
-                
-                // 重置表单状态
-                uploadForm.reset();
+                console.log('请求成功，返回数据:', data);
+                // 上传成功，跳转到任务详情页
+                window.location.href = `/web/tasks`;
             })
             .catch(error => {
-                // 显示错误消息
+                console.error('请求发生错误:', error);
                 showError(error.message);
-            })
-            .finally(() => {
-                // 重置按钮状态
-                submitBtn.disabled = false;
-                spinner.classList.add('d-none');
-                btnText.textContent = '开始转写';
-                
-                // 滚动到结果卡片
-                if (!successCard.classList.contains('d-none')) {
-                    successCard.scrollIntoView({ behavior: 'smooth' });
-                } else if (!errorCard.classList.contains('d-none')) {
-                    errorCard.scrollIntoView({ behavior: 'smooth' });
-                }
+                resetButtonState();
             });
         });
         
         // 显示错误消息
         function showError(message) {
+            console.error('显示错误消息:', message);
             document.getElementById('error-message').textContent = message;
             errorCard.classList.remove('d-none');
         }
         
+        // 重置按钮状态
+        function resetButtonState() {
+            console.log('重置按钮状态');
+            submitBtn.disabled = false;
+            spinner.classList.add('d-none');
+            btnText.textContent = '开始转写';
+        }
+        
         // 重试按钮
         retryBtn.addEventListener('click', function() {
+            console.log('点击重试按钮');
             errorCard.classList.add('d-none');
             document.getElementById('audioFile').focus();
         });

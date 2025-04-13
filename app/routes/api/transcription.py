@@ -227,40 +227,6 @@ async def create_transcription_task(
     
     return simplified_task
 
-@router.get("/task/{task_id}", response_model=SimplifiedTranscriptionTask)
-async def get_task(task_id: str, request: Request, response: Response):
-    """
-    获取转写任务的状态和信息
-    """
-    task = transcription_service.get_task(task_id)
-    if not task:
-        error_response = SimplifiedTranscriptionTask(
-            task_id=task_id,
-            client_id="unknown",
-            filename="",
-            file_path="",
-            created_at=datetime.now().isoformat(),
-            code=ERROR_TASK_NOT_FOUND,
-            message=ERROR_MESSAGES[ERROR_TASK_NOT_FOUND]
-        )
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return error_response
-    
-    # 转换为简化版返回对象
-    simplified_task = SimplifiedTranscriptionTask(
-        task_id=task.task_id,
-        client_id=task.client_id,
-        filename=task.filename,
-        file_path=task.file_path,
-        result_path=task.result_path,
-        created_at=task.created_at,
-        extra_params=task.extra_params,
-        code=task.code,
-        message=task.message
-    )
-    
-    return simplified_task
-
 @router.get("/download/{task_id}", response_class=Response)
 async def download_result_file(
     task_id: str,
@@ -304,19 +270,3 @@ async def download_result_file(
             "Content-Disposition": f'attachment; filename="{filename}"'
         }
     )
-
-@router.get("/tasks", response_model=List[TranscriptionStatus])
-async def list_transcriptions(
-    limit: int = 10,
-    offset: int = 0,
-    client_id: Optional[str] = ''
-):
-    """
-    列出转写任务，可选按客户端ID过滤
-    """
-    tasks = transcription_service.get_client_tasks(client_id, limit, offset)
-
-    return [
-        TranscriptionStatus(**task.dict())
-        for task in tasks
-    ]

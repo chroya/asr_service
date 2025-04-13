@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from fastapi import HTTPException
 from app.core.config import settings
 from app.utils.storage import RedisStorage
@@ -12,7 +12,7 @@ class TaskStatusService:
         """
         获取任务状态
         :param task_id: 任务ID
-        :return: 任务状态信息x
+        :return: 任务状态信息
         """
         try:
             # 从Redis获取任务信息
@@ -96,4 +96,83 @@ class TaskStatusService:
             raise HTTPException(
                 status_code=500,
                 detail=f"查询失败: {str(e)}"
+            )
+            
+    async def get_tasks(self, task_ids: Optional[List[str]] = None, limit: int = 10, offset: int = 0) -> List[TranscriptionTask]:
+        """
+        获取任务列表
+        
+        Args:
+            task_ids: 指定的任务ID列表，如果为None则获取所有任务
+            limit: 返回的最大任务数量
+            offset: 偏移量
+            
+        Returns:
+            List[TranscriptionTask]: 任务列表
+        """
+        try:
+            # 获取所有任务ID列表
+            all_task_ids = self.redis.get_keys("*") or []
+            
+            # 如果指定了task_ids，则只获取这些任务
+            if task_ids:
+                all_task_ids = [tid for tid in all_task_ids if tid in task_ids]
+            
+            # 分页
+            task_ids = all_task_ids[offset:offset + limit]
+            
+            # 获取每个任务的详细信息
+            tasks = []
+            for task_id in task_ids:
+                task_data = self.redis.get(task_id)
+                if task_data:
+                    tasks.append(TranscriptionTask(**task_data))
+            
+            # 按创建时间倒序排序
+            tasks.sort(key=lambda x: x.created_at, reverse=True)
+            
+            return tasks
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"获取任务列表失败: {str(e)}"
+            )
+
+    async def get_task_detail(self, task_id: str) -> TranscriptionTask:
+        """
+        获取任务详细信息
+        
+        Args:
+            task_id: 任务ID
+            
+        Returns:
+            TranscriptionTask: 任务详细信息
+            
+        Raises:
+            HTTPException: 当任务不存在或查询失败时
+        """
+        try:
+            # 从Redis获取任务信息
+            task_data = self.redis.get(task_id)
+            print(f"Task data from Redis: {task_data}")  # 添加调试日志
+            
+            if not task_data:
+                raise HTTPException(
+                    status_code=404,
+                    detail="任务不存在"
+                )
+            
+            # 将Redis数据转换为TranscriptionTask对象
+            task = TranscriptionTask(**task_data)
+            print(f"Converted task: {task}")  # 添加调试日志
+            return task
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error in get_task_detail: {str(e)}")  # 添加调试日志
+            raise HTTPException(
+                status_code=500,
+                detail=f"获取任务详情失败: {str(e)}"
             ) 

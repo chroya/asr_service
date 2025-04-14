@@ -30,6 +30,65 @@ router = APIRouter()
 transcription_service = TranscriptionService()
 cloud_stats_service = CloudStatsService()
 
+# 新增接口：通过task_id和content_id查询server_id
+@router.get("/transcription/server_id")
+async def get_server_id(task_id: str, content_id: str, _: bool = Depends(jwt_auth_middleware)):
+    """
+    根据task_id和content_id查询server_id
+    
+    Args:
+        server_id: 请求路径中的server_id参数(仅作为路径标识，不实际使用)
+        task_id: 任务ID
+        content_id: 内容ID
+        
+    Returns:
+        Dict: 包含server_id的响应结果
+    """
+    # 获取任务信息
+    task = transcription_service.get_task(task_id)
+    
+    # 任务不存在
+    if not task:
+        return {
+            "code": -1,
+            "message": "failed",
+            "data": ""
+        }
+    
+    # 获取extra_params
+    extra_params = task.extra_params
+    
+    # 验证content_id是否匹配
+    task_content_id = ""
+    if extra_params:
+        # extra_params可能是字典或对象，需要适配两种获取方式
+        if isinstance(extra_params, dict):
+            task_content_id = extra_params.get("content_id", "")
+        else:
+            task_content_id = getattr(extra_params, "content_id", "")
+    
+    if not task_content_id or task_content_id != content_id:
+        return {
+            "code": -1, 
+            "message": "failed",
+            "data": ""
+        }
+    
+    # 获取server_id
+    found_server_id = ""
+    if extra_params:
+        if isinstance(extra_params, dict):
+            found_server_id = extra_params.get("server_id", "")
+        else:
+            found_server_id = getattr(extra_params, "server_id", "")
+    
+    # 返回结果
+    return {
+        "code": 0,
+        "message": "ok",
+        "data": found_server_id
+    }
+
 def add_rate_limit_headers(response: Response, client_id: str) -> None:
     """
     向响应头添加速率限制信息

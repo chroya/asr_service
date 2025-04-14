@@ -81,6 +81,9 @@ class Settings():
 
     SERVER_ID = os.getenv("SERVER_ID", "sz-asr-001")
 
+    # 转写任务配置
+    MAX_TRANSCRIPTION_RETRY: int = int(os.getenv("MAX_TRANSCRIPTION_RETRY", "3"))  # 转写任务最大重试次数
+
     class Config:
         env_file = ".env"
         case_sensitive = True

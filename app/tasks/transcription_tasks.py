@@ -5,13 +5,14 @@ import time
 from typing import Dict, Any, Optional, Tuple
 
 from app.core.celery import celery_app
+from app.core.config import settings
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
 from app.services.mqtt_service import get_mqtt_service
 from app.services.webhook_service import get_webhook_service
 from app.utils.error_codes import (
     SUCCESS, ERROR_TASK_NOT_FOUND, ERROR_FILE_NOT_FOUND, 
-    ERROR_PROCESSING_FAILED, get_error_message
+    ERROR_PROCESSING_FAILED, ERROR_MAX_RETRY_EXCEEDED, get_error_message
 )
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 transcription_service = TranscriptionService()
 cloud_stats_service = CloudStatsService()
 webhook_service = get_webhook_service()
+
+# 从配置中获取最大重试次数
+MAX_RETRY_COUNT = settings.MAX_TRANSCRIPTION_RETRY
 
 def create_task_result(
     status: str,
@@ -132,6 +136,52 @@ def process_transcription(self, task_id: str):
             message=error_result["error"]
         )
         return error_result
+    
+    # 检查重试次数
+    current_retry_count = task.retry_count
+    logger.info(f"任务 {task_id} 当前重试次数: {current_retry_count}")
+    
+    # 如果重试次数超过最大限制，将任务标记为失败
+    if current_retry_count >= MAX_RETRY_COUNT:
+        error_msg = f"任务重试次数已达上限 ({MAX_RETRY_COUNT}次)"
+        logger.warning(f"任务 {task_id} {error_msg}")
+        
+        # 更新任务状态为失败
+        transcription_service.update_task(
+            task_id,
+            status="failed",
+            error_message=error_msg,
+            code=ERROR_MAX_RETRY_EXCEEDED,
+            message=get_error_message(ERROR_MAX_RETRY_EXCEEDED)
+        )
+        
+        # 创建失败结果
+        error_result = create_task_result(
+            status="failed",
+            task_id=task_id,
+            error=error_msg,
+            code=ERROR_MAX_RETRY_EXCEEDED,
+            timings={
+                "task_received": time.time() - start_time,
+                "total_time": time.time() - start_time
+            }
+        )
+        
+        # 发送失败通知
+        get_mqtt_service().send_transcription_complete(
+            task_id, 
+            code=ERROR_MAX_RETRY_EXCEEDED,
+            message=error_msg
+        )
+        
+        return error_result
+    
+    # 增加重试次数并更新任务
+    transcription_service.update_task(
+        task_id,
+        retry_count=current_retry_count + 1
+    )
+    logger.info(f"任务 {task_id} 重试次数已更新为: {current_retry_count + 1}")
     
     try:
         # 更新任务状态为处理中

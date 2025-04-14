@@ -20,6 +20,7 @@ ERROR_FILE_TOO_LARGE = 1004        # 文件大小超过限制
 ERROR_TASK_NOT_FOUND = 1101        # 任务不存在
 ERROR_TASK_NOT_COMPLETED = 1102    # 任务尚未完成
 ERROR_RESULT_NOT_FOUND = 1103      # 任务结果不存在
+ERROR_MAX_RETRY_EXCEEDED = 1104    # 任务重试次数超限
 
 # 服务错误 (12xx)
 ERROR_SERVICE_UNAVAILABLE = 1201   # 服务不可用
@@ -35,6 +36,7 @@ ERROR_MESSAGES = {
     ERROR_TASK_NOT_FOUND: "任务不存在",
     ERROR_TASK_NOT_COMPLETED: "任务尚未完成",
     ERROR_RESULT_NOT_FOUND: "任务结果不存在",
+    ERROR_MAX_RETRY_EXCEEDED: "任务重试次数超限，任务已被取消",
     ERROR_SERVICE_UNAVAILABLE: "服务不可用",
     ERROR_RATE_LIMIT_EXCEEDED: "超出速率限制"
 }

@@ -1,8 +1,11 @@
+import logging
 from typing import Optional, Dict, Any, List
 from fastapi import HTTPException
 from app.core.config import settings
 from app.utils.storage import RedisStorage
 from app.schemas.transcription import TranscriptionTask
+
+logger = logging.getLogger(__name__)
 
 class TaskStatusService:
     def __init__(self):
@@ -93,6 +96,7 @@ class TaskStatusService:
             return response
             
         except Exception as e:
+            logger.error(f"查询失败: {str(e)}")
             raise HTTPException(
                 status_code=500,
                 detail=f"查询失败: {str(e)}"
@@ -134,6 +138,7 @@ class TaskStatusService:
             return tasks
             
         except Exception as e:
+            logger.error(f"获取任务列表失败: {str(e)}")
             raise HTTPException(
                 status_code=500,
                 detail=f"获取任务列表失败: {str(e)}"
@@ -155,7 +160,7 @@ class TaskStatusService:
         try:
             # 从Redis获取任务信息
             task_data = self.redis.get(task_id)
-            print(f"Task data from Redis: {task_data}")  # 添加调试日志
+            logger.debug(f"Task data from Redis: {task_data}")  # 添加调试日志
             
             if not task_data:
                 raise HTTPException(
@@ -165,13 +170,13 @@ class TaskStatusService:
             
             # 将Redis数据转换为TranscriptionTask对象
             task = TranscriptionTask(**task_data)
-            print(f"Converted task: {task}")  # 添加调试日志
+            logger.debug(f"Converted task: {task}")  # 添加调试日志
             return task
             
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error in get_task_detail: {str(e)}")  # 添加调试日志
+            logger.error(f"Error in get_task_detail: {str(e)}")  # 添加调试日志
             raise HTTPException(
                 status_code=500,
                 detail=f"获取任务详情失败: {str(e)}"

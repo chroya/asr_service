@@ -22,16 +22,16 @@ class TranscriptionExtraParams(BaseModel):
     """
     转写任务的额外参数
     """
-    u_id: Optional[int] = Field(..., description="用户唯一标识ID")
+    u_id: Optional[int] = Field(None, description="用户唯一标识ID")
     record_file_name: str = Field(..., description="录音文件名")
     task_id: str = Field(..., description="任务ID，格式为 UID:{用户ID}_文件前2MB内容的MD5")
     mode_id: int = Field(..., description="使用的模板ID（提示词模板）")
     language: str = Field(..., description="语言")
-    ai_mode: Optional[str] = Field(..., description="使用的AI模式（如 GPT-4o）")
-    speaker: Optional[bool] = Field(..., description="是否启用说话人分离")
+    ai_mode: Optional[str] = Field(None, description="使用的AI模式（如 GPT-4o）")
+    speaker: Optional[bool] = Field(None, description="是否启用说话人分离")
     whisper_arch: Optional[str] = Field(..., description="使用的Whisper模型名")
-    content_id: Optional[str] = Field(..., description="内容ID")
-    server_id: Optional[str] = Field(..., description="服务器ID")
+    content_id: Optional[str] = Field(None, description="内容ID")
+    server_id: Optional[str] = Field(None, description="服务器ID")
 
 class TranscriptionTask(BaseModel):
     """

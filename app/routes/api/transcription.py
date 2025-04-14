@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 import shutil
@@ -48,6 +49,8 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
     #     if rate_limit_info.retry_after:
     #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
 
+logger = logging.getLogger(__name__)
+
 @router.post("/uploadfile", status_code=status.HTTP_200_OK, response_model=SimplifiedTranscriptionTask)
 async def create_transcription_task(
     request: Request,
@@ -92,6 +95,8 @@ async def create_transcription_task(
         whisper_arch = params.get("whisper_arch")
         content_id = params.get("content_id")
         server_id = params.get("server_id")
+
+        logger.info(f"收到 POST 请求，extra_params参数为：{params}")
         
         if whisper_arch not in ARCH_LIST:
             whisper_arch = settings.WHISPER_MODEL_NAME

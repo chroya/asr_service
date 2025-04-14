@@ -13,6 +13,7 @@ LARGE_V3_TURBO = "large-v3-turbo"
 ARCH_LIST = [
     TINY,
     SMALL,
+    BASE,
     MEDIUM,
     LARGE,
     LARGE_V1,

@@ -304,7 +304,10 @@ async def download_result_file(
     需要在请求头中提供有效的JWT令牌：
     Authorization: Bearer <your_jwt_token>
     """
-    filename = f"{task_id}.json"
+    if '.' in task_id:
+        filename = task_id
+    else:
+        filename = f"{task_id}.json"
     # 构建文件路径
     file_path = os.path.join(settings.TRANSCRIPTION_DIR, filename)
     

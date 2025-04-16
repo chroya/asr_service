@@ -89,7 +89,7 @@ class MQTTService:
             }
             
             # 构建下载URL
-            download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}"
+            download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
             
             # 根据状态码设置data字段
             if code == 0:  # 成功状态

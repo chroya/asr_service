@@ -3,3 +3,8 @@ __pycache__
 *.pyc
 transcriptions/*
 logs/*
+celerybeat-schedule.bak
+celerybeat-schedule.dat
+celerybeat-schedule.dir
+gunicorn_conf.py
+uwsgi.ini

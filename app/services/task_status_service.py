@@ -2,14 +2,15 @@ import logging
 from typing import Optional, Dict, Any, List
 from fastapi import HTTPException
 from app.core.config import settings
-from app.utils.storage import RedisStorage
+from app.services.redis_service import RedisService
 from app.schemas.transcription import TranscriptionTask
 
 logger = logging.getLogger(__name__)
 
 class TaskStatusService:
     def __init__(self):
-        self.redis = RedisStorage(prefix="transcription:")
+        redis_service = RedisService()
+        self.redis = redis_service.get_client(prefix="transcription:")
         
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """

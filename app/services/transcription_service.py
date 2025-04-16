@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.whisperx import WhisperXProcessor
-from app.utils.storage import RedisStorage
+from app.services.redis_service import RedisService
 from app.utils.error_codes import (
      SUCCESS, ERROR_PROCESSING_FAILED, get_error_message
 )
@@ -28,7 +28,8 @@ class TranscriptionService:
         os.makedirs(settings.TRANSCRIPTION_DIR, exist_ok=True)
         
         # 初始化数据存储
-        self.storage = RedisStorage(prefix="transcription:")
+        redis_service = RedisService()
+        self.storage = redis_service.get_client(prefix="transcription:")
         
         # 初始化转写处理器
         self.processor = WhisperXProcessor()

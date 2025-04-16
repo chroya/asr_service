@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 from typing import Dict, Any
 
-from app.utils.storage import RedisStorage
+from app.services.redis_service import RedisService
 from app.schemas.transcription import TranscriptionTask
 from app.core.config import settings
 
@@ -34,8 +34,9 @@ def fix_extra_params(task_data: Dict[str, Any]) -> Dict[str, Any]:
 def migrate_timestamps():
     """迁移Redis中的时间戳格式"""
     try:
-        # 初始化Redis存储
-        redis = RedisStorage(prefix="transcription:")
+        # 更新Redis连接初始化
+        redis_service = RedisService()
+        redis = redis_service.get_client(prefix="transcription:")
         
         # 获取所有任务ID
         task_ids = redis.get_keys("*")

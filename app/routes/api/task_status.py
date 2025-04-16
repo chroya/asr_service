@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Query, Depends
-from app.services.task_status_service import TaskStatusService
 from typing import Dict, Any, List, Optional
+
+from app.dependencies.services import get_task_status_service
+from app.services.task_status_service import TaskStatusService
 from app.schemas.transcription import TranscriptionTask
 
 router = APIRouter()
@@ -8,7 +10,7 @@ router = APIRouter()
 @router.get("/get_task_status", response_model=Dict[str, Any])
 async def get_task_status(
     task_id: str = Query(..., description="任务ID"),
-    task_status_service: TaskStatusService = Depends()
+    task_status_service: TaskStatusService = Depends(get_task_status_service)
 ) -> Dict[str, Any]:
     """
     获取任务状态
@@ -23,7 +25,7 @@ async def list_tasks(
     task_ids: Optional[List[str]] = Query(None, description="任务ID列表，不提供则返回所有任务"),
     limit: int = Query(10, description="每页返回的任务数量"),
     offset: int = Query(0, description="分页偏移量"),
-    task_status_service: TaskStatusService = Depends()
+    task_status_service: TaskStatusService = Depends(get_task_status_service)
 ) -> List[TranscriptionTask]:
     """
     获取任务列表
@@ -42,7 +44,7 @@ async def list_tasks(
 @router.get("/task/{task_id}", response_model=TranscriptionTask)
 async def get_task_detail(
     task_id: str,
-    task_status_service: TaskStatusService = Depends()
+    task_status_service: TaskStatusService = Depends(get_task_status_service)
 ) -> TranscriptionTask:
     """
     获取单个任务的详细信息

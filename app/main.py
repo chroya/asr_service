@@ -5,10 +5,13 @@ import os
 import logging
 from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse
+import logging.config
+from functools import lru_cache
 
 from app.routes import api_app_router, web_app_router
 from app.core.config import settings
 from app.utils.logging_config import setup_logging
+from app.dependencies.services import get_task_status_service, get_transcription_service
 
 # 标记为supervisor环境（如果通过supervisor启动）
 if "SUPERVISOR_PROCESS_NAME" in os.environ:
@@ -16,7 +19,6 @@ if "SUPERVISOR_PROCESS_NAME" in os.environ:
 
 # 配置日志
 setup_logging(log_level=logging.INFO)
-
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
@@ -65,6 +67,28 @@ def create_app() -> FastAPI:
     
     # 记录应用启动日志
     logger.info(f"{settings.APP_NAME} 应用已启动")
+    
+    @app.on_event("startup")
+    async def startup_event():
+        """
+        应用启动时的初始化工作
+        """
+        logger.info("应用启动，初始化服务...")
+        # 预热服务实例
+        get_task_status_service()
+        get_transcription_service()
+        logger.info("服务初始化完成")
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """
+        应用关闭时的清理工作
+        """
+        logger.info("应用关闭，清理资源...")
+        # 清理缓存的服务实例
+        get_task_status_service.cache_clear()
+        get_transcription_service.cache_clear()
+        logger.info("资源清理完成")
     
     return app
 

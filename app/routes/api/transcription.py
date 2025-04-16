@@ -3,9 +3,9 @@ import os
 import json
 import shutil
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response, Depends
+from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from app.models.api_models import TranscriptionStatus
@@ -23,16 +23,20 @@ from app.schemas.transcription import TranscriptionTask, RateLimitInfo, Transcri
 from app.tasks.transcription_tasks import process_transcription
 from app.utils.whisper_arch import ARCH_LIST
 from app.core.auth import jwt_auth_middleware
+from app.dependencies.services import get_transcription_service
 
 router = APIRouter()
 
 # 服务实例
-transcription_service = TranscriptionService()
-cloud_stats_service = CloudStatsService()
+# transcription_service = TranscriptionService()
+# cloud_stats_service = CloudStatsService()
+
 
 # 新增接口：通过task_id和content_id查询server_id
 @router.get("/transcription/server_id")
-async def get_server_id(task_id: str, content_id: str, _: bool = Depends(jwt_auth_middleware)):
+async def get_server_id(task_id: str, content_id: str, 
+                        _: bool = Depends(jwt_auth_middleware), 
+                        transcription_service: TranscriptionService = Depends(get_transcription_service)):
     """
     根据task_id和content_id查询server_id
     
@@ -116,7 +120,8 @@ async def create_transcription_task(
     response: Response,
     file: UploadFile = File(...),
     extra_params: str = Form(...),
-    _: bool = Depends(jwt_auth_middleware)  # 添加JWT鉴权
+    _: bool = Depends(jwt_auth_middleware),  # 添加JWT鉴权
+    transcription_service: TranscriptionService = Depends(get_transcription_service)
 ):
     """
     创建一个新的转写任务

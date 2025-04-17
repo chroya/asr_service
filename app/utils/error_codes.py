@@ -15,6 +15,7 @@ ERROR_FILE_NOT_FOUND = 1001        # 音频文件不存在
 ERROR_PROCESSING_FAILED = 1002     # 处理失败
 ERROR_INVALID_FILE_FORMAT = 1003   # 无效的音频文件格式
 ERROR_FILE_TOO_LARGE = 1004        # 文件大小超过限制
+ERROR_FILE_TOO_SMALL = 1005        # 文件大小过小
 
 # 任务状态相关错误 (11xx)
 ERROR_TASK_NOT_FOUND = 1101        # 任务不存在
@@ -33,6 +34,7 @@ ERROR_MESSAGES = {
     ERROR_PROCESSING_FAILED: "处理失败",
     ERROR_INVALID_FILE_FORMAT: "无效的音频文件。支持的格式：MP3, WAV, FLAC, M4A, OGG",
     ERROR_FILE_TOO_LARGE: "文件大小超过限制",
+    ERROR_FILE_TOO_SMALL: "文件大小过小，无法处理",
     ERROR_TASK_NOT_FOUND: "任务不存在",
     ERROR_TASK_NOT_COMPLETED: "任务尚未完成",
     ERROR_RESULT_NOT_FOUND: "任务结果不存在",

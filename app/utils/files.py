@@ -38,15 +38,15 @@ async def validate_audio_file(file: UploadFile) -> bool:
     # 至少需要满足一个条件：扩展名有效或MIME类型有效
     return (file_ext in valid_extensions) or (content_type in valid_mime_types)
 
-async def get_file_size_mb(file: UploadFile) -> float:
+async def get_file_size_bytes(file: UploadFile) -> int:
     """
-    获取上传文件的大小（MB）- 优化的异步实现
+    获取上传文件的大小（字节）- 优化的异步实现
     
     Args:
         file: 上传的文件对象
         
     Returns:
-        float: 文件大小（MB）
+        int: 文件大小（字节）
     """
     try:
         # 尝试直接从文件对象获取大小
@@ -55,18 +55,31 @@ async def get_file_size_mb(file: UploadFile) -> float:
             file.file.seek(0, 2)  # 移动到文件末尾
             file_size = file.file.tell()
             file.file.seek(current_position)  # 恢复位置
-            return file_size / (1024 * 1024)
+            return file_size
     except Exception:
         pass
     
     # 如果无法直接获取，使用content-length头
     if 'content-length' in file.headers:
-        return int(file.headers['content-length']) / (1024 * 1024)
+        return int(file.headers['content-length'])
     
     # 最后的备选方案：读取整个文件（不推荐）
     content = await file.read()
     await file.seek(0)  # 重置文件指针
-    return len(content) / (1024 * 1024)
+    return len(content)
+
+async def get_file_size_mb(file: UploadFile) -> float:
+    """
+    获取上传文件的大小（MB）
+    
+    Args:
+        file: 上传的文件对象
+        
+    Returns:
+        float: 文件大小（MB）
+    """
+    bytes_size = await get_file_size_bytes(file)
+    return bytes_size / (1024 * 1024)
 
 async def save_upload_file(
     file: UploadFile,

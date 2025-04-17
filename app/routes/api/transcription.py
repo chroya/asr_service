@@ -12,10 +12,10 @@ from app.models.api_models import TranscriptionStatus
 from app.core.config import settings
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
-from app.utils.files import validate_audio_file, save_upload_file, get_file_size_mb
+from app.utils.files import validate_audio_file, save_upload_file, get_file_size_bytes, get_file_size_mb
 from app.utils.error_codes import (
     SUCCESS, ERROR_FILE_NOT_FOUND, ERROR_PROCESSING_FAILED, 
-    ERROR_INVALID_FILE_FORMAT, ERROR_FILE_TOO_LARGE,
+    ERROR_INVALID_FILE_FORMAT, ERROR_FILE_TOO_LARGE, ERROR_FILE_TOO_SMALL,
     ERROR_TASK_NOT_FOUND, ERROR_TASK_NOT_COMPLETED, ERROR_RESULT_NOT_FOUND,
     ERROR_MESSAGES, get_error_message
 )
@@ -224,8 +224,37 @@ async def create_transcription_task(
         return error_response
     
     # 检查文件大小
-    file_size_mb = await get_file_size_mb(file)
-    if file_size_mb > settings.MAX_UPLOAD_SIZE:
+    file_size_bytes = await get_file_size_bytes(file)
+    file_size_mb = file_size_bytes / (1024 * 1024)
+    
+    # 检查文件是否太小
+    if file_size_bytes < settings.MIN_UPLOAD_SIZE_BYTES:
+        error_response = SimplifiedTranscriptionTask(
+            task_id=task_id,
+            client_id=str(u_id),
+            filename=file.filename,
+            file_path="",
+            created_at=datetime.now().isoformat(),
+            code=ERROR_FILE_TOO_SMALL,
+            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_SMALL]}。最小限制: {settings.MIN_UPLOAD_SIZE_BYTES}字节",
+            extra_params=TranscriptionExtraParams(
+                u_id=u_id,
+                record_file_name=file.filename,
+                task_id=task_id,
+                mode_id=mode_id,
+                language=language,
+                ai_mode=ai_mode,
+                speaker=speaker,
+                whisper_arch=whisper_arch,
+                content_id=content_id,
+                server_id=server_id
+            )
+        )
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return error_response
+    
+    # 检查文件是否太大
+    if file_size_mb > settings.MAX_UPLOAD_SIZE_MB:
         error_response = SimplifiedTranscriptionTask(
             task_id=task_id,
             client_id=str(u_id),
@@ -233,7 +262,7 @@ async def create_transcription_task(
             file_path="",
             created_at=datetime.now().isoformat(),
             code=ERROR_FILE_TOO_LARGE,
-            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE}MB",
+            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE_MB}MB",
             extra_params=TranscriptionExtraParams(
                 u_id=u_id,
                 record_file_name=file.filename,

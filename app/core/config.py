@@ -51,7 +51,8 @@ class Settings():
     # 文件上传设置
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     TRANSCRIPTION_DIR: str = os.getenv("TRANSCRIPTION_DIR", "./transcriptions")
-    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "250"))  # 默认250MB
+    MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "250"))  # 默认250MB
+    MIN_UPLOAD_SIZE_BYTES: int = int(os.getenv("MIN_UPLOAD_SIZE_BYTES", "1024"))  # 默认最小1KB
     
     # 用户限制设置 - 仅保留用于控制u_id限额的设置
     DEFAULT_USER_LIMIT_COUNT: int = int(os.getenv("DEFAULT_USER_LIMIT_COUNT", "10"))

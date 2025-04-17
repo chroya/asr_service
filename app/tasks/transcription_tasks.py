@@ -135,6 +135,14 @@ def process_transcription(self, task_id: str):
             code=error_result["code"],
             message=error_result["error"]
         )
+        
+        # 发送失败的Webhook通知 - 前置条件检查失败
+        webhook_service.send_transcription_complete(
+            extra_params={},  # 没有任务信息时使用空字典
+            result={"status": "failed", "error": error_result["error"], "code": error_result["code"]},
+            use_time=int(time.time() - start_time)
+        )
+        
         return error_result
     
     # 检查重试次数
@@ -174,6 +182,13 @@ def process_transcription(self, task_id: str):
             message=error_msg
         )
         
+        # 发送失败的Webhook通知 - 重试次数超限
+        webhook_service.send_transcription_complete(
+            extra_params=task.extra_params or {},
+            result={"status": "failed", "error": error_msg, "code": ERROR_MAX_RETRY_EXCEEDED},
+            use_time=int(time.time() - start_time)
+        )
+        
         return error_result
     
     # 增加重试次数并更新任务
@@ -204,7 +219,7 @@ def process_transcription(self, task_id: str):
             webhook_service.send_transcription_complete(
                 extra_params=task.extra_params or {},
                 result=result.get('result', {}),
-                duration=int(audio_duration),
+                # duration=int(audio_duration),
                 use_time=int(time.time() - start_time)
             )
             
@@ -246,6 +261,13 @@ def process_transcription(self, task_id: str):
                 message=error_msg
             )
             
+            # 发送失败情况的Webhook通知
+            webhook_service.send_transcription_complete(
+                extra_params=task.extra_params or {},
+                result={"status": "failed", "error": error_msg, "code": error_code},
+                use_time=int(time.time() - start_time)
+            )
+            
             return error_result
             
     except Exception as e:
@@ -285,6 +307,13 @@ def process_transcription(self, task_id: str):
             task_id, 
             code=error_code,
             message=error_message
+        )
+        
+        # 发送异常情况的Webhook通知
+        webhook_service.send_transcription_complete(
+            extra_params=task.extra_params or {},
+            result={"status": "failed", "error": error_message, "code": error_code},
+            use_time=int(time.time() - start_time)
         )
         
         return error_result 

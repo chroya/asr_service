@@ -22,12 +22,14 @@
                     <p><strong>创建时间:</strong> <span id="created-at"></span></p>
                     <p><strong>完成时间:</strong> <span id="completed-at">-</span></p>
                     <p><strong>重试次数:</strong> <span id="retry-count">0</span></p>
+                    <p><strong>文件大小:</strong> <span id="file-size">-</span></p>
                 </div>
                 <div class="col-md-6">
                     <p><strong>状态:</strong> <span id="status-badge"></span></p>
                     <p><strong>音频时长:</strong> <span id="audio-duration">-</span></p>
                     <p><strong>处理耗时:</strong> <span id="processing-time">-</span></p>
                     <p><strong>请求语言:</strong> <span id="language"></span></p>
+                    <p><strong>说话人分离:</strong> <span id="diarization">-</span></p>
                 </div>
             </div>
             <div class="row mt-3">
@@ -37,6 +39,37 @@
                 </div>
                 <div class="col-md-6">
                     <p><strong>服务器ID:</strong> <span id="server-id">-</span></p>
+                </div>
+            </div>
+            
+            <!-- 处理耗时明细 -->
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6>处理耗时明细</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>步骤</th>
+                                    <th>耗时</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>上传耗时</td>
+                                    <td id="upload-time">-</td>
+                                </tr>
+                                <tr>
+                                    <td>转写耗时</td>
+                                    <td id="transcribe-time">-</td>
+                                </tr>
+                                <tr>
+                                    <td>总结耗时</td>
+                                    <td id="summary-time">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -160,6 +193,7 @@
                     document.getElementById('created-at').textContent = formatDate(data.created_at);
                     document.getElementById('completed-at').textContent = data.completed_at ? formatDate(data.completed_at) : '-';
                     document.getElementById('retry-count').textContent = data.retry_count || 0;
+                    document.getElementById('file-size').textContent = data.file_size ? formatFileSize(data.file_size) : '-';
                     
                     // 使用extra_params
                     const extraParams = data.extra_params || {};
@@ -171,6 +205,24 @@
                     // 更新音频时长和处理耗时
                     document.getElementById('audio-duration').textContent = data.audio_duration ? formatDuration(data.audio_duration) : '-';
                     document.getElementById('processing-time').textContent = data.processing_time ? formatDuration(data.processing_time) : '-';
+                    
+                    // 更新文件大小
+                    document.getElementById('file-size').textContent = data.file_size ? formatFileSize(data.file_size) : '-';
+                    
+                    // 获取说话人分离状态
+                    const diarizationEl = document.getElementById('diarization');
+                    const diarization = extraParams.diarization === true || extraParams.diarization === 'true';
+                    diarizationEl.textContent = diarization ? '已启用' : '未启用';
+                    
+                    // 更新处理耗时明细
+                    if (data.step_times) {
+                        document.getElementById('upload-time').textContent = 
+                            data.step_times.upload ? formatDuration(data.step_times.upload) : '-';
+                        document.getElementById('transcribe-time').textContent = 
+                            data.step_times.transcribe ? formatDuration(data.step_times.transcribe) : '-';
+                        document.getElementById('summary-time').textContent = 
+                            data.step_times.summary ? formatDuration(data.step_times.summary) : '-';
+                    }
                     
                     // 根据code判断状态
                     let status;
@@ -521,6 +573,22 @@
             };
             
             return languageMap[languageCode] || languageCode;
+        }
+        
+        // 辅助函数 - 格式化文件大小
+        function formatFileSize(bytes) {
+            if (!bytes || bytes <= 0) return '-';
+            
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let unitIndex = 0;
+            let size = bytes;
+            
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            
+            return `${size.toFixed(2)} ${units[unitIndex]}`;
         }
     });
 </script>

@@ -178,7 +178,8 @@
                         actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.task_id}'">查看详情</button>`;
                         actions += `<button class="btn btn-sm btn-success me-1" onclick="downloadResult('${task.task_id}')">下载结果</button>`;
                     } else if (task.status === 'failed') {
-                        actions = `<button class="btn btn-sm btn-warning me-1" onclick="retryTask('${task.task_id}')">重试</button>`;
+                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.task_id}'">查看详情</button>`;
+                        actions += `<button class="btn btn-sm btn-warning me-1" onclick="retryTask('${task.task_id}')">重试</button>`;
                     }
                     actions += `<button class="btn btn-sm btn-danger" onclick="deleteTask('${task.task_id}')">删除</button>`;
                     

@@ -123,18 +123,18 @@ class TaskStatusService:
             if task_ids:
                 all_task_ids = [tid for tid in all_task_ids if tid in task_ids]
             
-            # 分页
-            task_ids = all_task_ids[offset:offset + limit]
-            
-            # 获取每个任务的详细信息
-            tasks = []
-            for task_id in task_ids:
+            # 获取所有任务的详细信息
+            all_tasks = []
+            for task_id in all_task_ids:
                 task_data = self.redis.get(task_id)
                 if task_data:
-                    tasks.append(TranscriptionTask(**task_data))
+                    all_tasks.append(TranscriptionTask(**task_data))
             
-            # 按创建时间倒序排序
-            tasks.sort(key=lambda x: x.created_at, reverse=True)
+            # 按创建时间倒序排序所有任务
+            all_tasks.sort(key=lambda x: x.created_at, reverse=True)
+            
+            # 分页
+            tasks = all_tasks[offset:offset + limit]
             
             return tasks
             

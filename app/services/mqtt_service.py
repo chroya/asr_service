@@ -77,50 +77,51 @@ class MQTTService:
         Returns:
             bool: 是否发送成功
         """
-        try:
-            # 确保MQTT客户端已连接
-            self._ensure_connected()
+        # 不发mqtt了
+        # try:
+        #     # 确保MQTT客户端已连接
+        #     self._ensure_connected()
             
-            # 构建消息内容
-            mqtt_message = {
-                "code": code,
-                "type": 1,  # 1表示转录
-                "task_id": task_id,
-            }
+        #     # 构建消息内容
+        #     mqtt_message = {
+        #         "code": code,
+        #         "type": 1,  # 1表示转录
+        #         "task_id": task_id,
+        #     }
             
-            # 构建下载URL
-            download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
+        #     # 构建下载URL
+        #     download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
             
-            # 根据状态码设置data字段
-            if code == 0:  # 成功状态
-                mqtt_message["data"] = {"trans_results": download_url}
-            else:  # 失败状态
-                mqtt_message["data"] = message or "转写错误"
+        #     # 根据状态码设置data字段
+        #     if code == 0:  # 成功状态
+        #         mqtt_message["data"] = {"trans_results": download_url}
+        #     else:  # 失败状态
+        #         mqtt_message["data"] = message or "转写错误"
             
-            # 发送消息，使用task_id作为topic
-            topic = get_topic(task_id)
-            result = self.client.publish(topic, json.dumps(mqtt_message))
-            if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"MQTT消息发送成功: {topic} , 下载链接: {download_url}, msg: {mqtt_message}")
-                return True
-            else:
-                logger.error(f"MQTT消息发送失败: {result.rc}")
-                # 尝试重新连接并发送消息
-                try:
-                    self.client.reconnect()
-                    result = self.client.publish(topic, json.dumps(mqtt_message))
-                    if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                        logger.info(f"MQTT消息重新发送成功: {topic}")
-                        return True
-                    else:
-                        logger.error(f"MQTT消息重新发送失败: {result.rc}")
-                except Exception as e:
-                    logger.error(f"重新连接MQTT客户端时出错: {str(e)}")
-                return False
+        #     # 发送消息，使用task_id作为topic
+        #     topic = get_topic(task_id)
+        #     result = self.client.publish(topic, json.dumps(mqtt_message))
+        #     if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        #         logger.info(f"MQTT消息发送成功: {topic} , 下载链接: {download_url}, msg: {mqtt_message}")
+        #         return True
+        #     else:
+        #         logger.error(f"MQTT消息发送失败: {result.rc}")
+        #         # 尝试重新连接并发送消息
+        #         try:
+        #             self.client.reconnect()
+        #             result = self.client.publish(topic, json.dumps(mqtt_message))
+        #             if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        #                 logger.info(f"MQTT消息重新发送成功: {topic}")
+        #                 return True
+        #             else:
+        #                 logger.error(f"MQTT消息重新发送失败: {result.rc}")
+        #         except Exception as e:
+        #             logger.error(f"重新连接MQTT客户端时出错: {str(e)}")
+        #         return False
                 
-        except Exception as e:
-            logger.error(f"发送MQTT消息时出错: {str(e)}")
-            return False
+        # except Exception as e:
+        #     logger.error(f"发送MQTT消息时出错: {str(e)}")
+        #     return False
     
     def __del__(self):
         """清理资源"""

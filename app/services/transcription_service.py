@@ -48,7 +48,8 @@ class TranscriptionService:
         speaker: bool = False,
         whisper_arch: str = settings.WHISPER_MODEL_NAME,
         content_id: Optional[str] = None,
-        server_id: Optional[str] = None
+        server_id: Optional[str] = None,
+        file_size: Optional[int] = None
     ) -> TranscriptionTask:
         """
         创建新的转写任务
@@ -67,6 +68,7 @@ class TranscriptionService:
             whisper_arch: Whisper架构
             content_id: 内容ID
             server_id: 服务器ID
+            file_size: 文件大小（字节）
             
         Returns:
             TranscriptionTask: 创建的任务信息
@@ -92,6 +94,7 @@ class TranscriptionService:
             status="pending",
             filename=original_filename,
             file_path=file_path,
+            file_size=file_size,
             result_path=result_path,
             language=language,
             created_at=datetime.now().isoformat(),

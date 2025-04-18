@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from app.models.api_models import TranscriptionStatus
 from app.core.config import settings
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
@@ -169,15 +168,13 @@ async def create_transcription_task(
         if not all([u_id, task_id, mode_id, ai_mode]):
             raise ValueError("缺少必要的参数")
         
-        # 生成 server_id
-        server_id = settings.SERVER_ID
-        
     except (json.JSONDecodeError, ValueError) as e:
         error_response = SimplifiedTranscriptionTask(
             task_id=task_id if 'task_id' in locals() else "unknown",
             client_id=str(u_id) if 'u_id' in locals() else "unknown",
             filename=file.filename,
             file_path="",
+            file_size=None,
             created_at=datetime.now().isoformat(),
             code=ERROR_PROCESSING_FAILED,
             message=f"解析参数失败: {str(e)}",
@@ -204,6 +201,7 @@ async def create_transcription_task(
             client_id=str(u_id),
             filename=file.filename,
             file_path="",
+            file_size=None,
             created_at=datetime.now().isoformat(),
             code=ERROR_INVALID_FILE_FORMAT,
             message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT],
@@ -234,6 +232,7 @@ async def create_transcription_task(
             client_id=str(u_id),
             filename=file.filename,
             file_path="",
+            file_size=file_size_bytes,
             created_at=datetime.now().isoformat(),
             code=ERROR_FILE_TOO_SMALL,
             message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_SMALL]}。最小限制: {settings.MIN_UPLOAD_SIZE_BYTES}字节",
@@ -260,6 +259,7 @@ async def create_transcription_task(
             client_id=str(u_id),
             filename=file.filename,
             file_path="",
+            file_size=file_size_bytes,
             created_at=datetime.now().isoformat(),
             code=ERROR_FILE_TOO_LARGE,
             message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE_MB}MB",
@@ -301,7 +301,8 @@ async def create_transcription_task(
         speaker=speaker,
         whisper_arch=whisper_arch,
         content_id=content_id,
-        server_id=server_id
+        server_id=server_id,
+        file_size=file_size_bytes
     )
     
     # 将任务添加到Celery队列
@@ -316,6 +317,7 @@ async def create_transcription_task(
         client_id=task.client_id,
         filename=task.filename,
         file_path=task.file_path,
+        file_size=task.file_size,
         result_path=task.result_path,
         created_at=task.created_at,
         extra_params=task.extra_params,

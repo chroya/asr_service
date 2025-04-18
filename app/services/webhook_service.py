@@ -22,8 +22,8 @@ class WebhookService:
     def send_transcription_complete(
         self,
         extra_params: Union[Dict[str, Any], BaseModel],
-        result: Dict[str, Any],
-        duration: int,
+        result: str,
+        code: int,
         use_time: int
     ) -> bool:
         """
@@ -31,8 +31,8 @@ class WebhookService:
         
         Args:
             extra_params: 给uploadfile的参数，可以是字典或Pydantic模型
-            result: 任务执行结果，JSON字符串格式
-            duration: 音频时长，单位为秒
+            result: JSON文件下载地址
+            code: 错误码，0表示成功
             use_time: 任务耗时，单位为秒
             
         Returns:
@@ -46,8 +46,8 @@ class WebhookService:
             # 准备webhook数据并确保使用标准JSON格式（双引号）
             webhook_data = json.loads(json.dumps({
                 "extra_params": extra_params,
-                "result": json.dumps(result),
-                "duration": duration,
+                "result": result,
+                "code": code,
                 "use_time": use_time
             }))
             

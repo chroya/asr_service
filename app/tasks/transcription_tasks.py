@@ -139,7 +139,8 @@ def process_transcription(self, task_id: str):
         # 发送失败的Webhook通知 - 前置条件检查失败
         webhook_service.send_transcription_complete(
             extra_params={},  # 没有任务信息时使用空字典
-            result={"status": "failed", "error": error_result["error"], "code": error_result["code"]},
+            result="",  # 失败时没有 JSON 文件下载地址
+            code=error_result["code"],
             use_time=int(time.time() - start_time)
         )
         
@@ -185,7 +186,8 @@ def process_transcription(self, task_id: str):
         # 发送失败的Webhook通知 - 重试次数超限
         webhook_service.send_transcription_complete(
             extra_params=task.extra_params or {},
-            result={"status": "failed", "error": error_msg, "code": ERROR_MAX_RETRY_EXCEEDED},
+            result="",  # 失败时没有 JSON 文件下载地址
+            code=ERROR_MAX_RETRY_EXCEEDED,
             use_time=int(time.time() - start_time)
         )
         
@@ -215,11 +217,12 @@ def process_transcription(self, task_id: str):
             # 报告任务完成
             cloud_stats_service.report_task_completion(task.client_id, audio_duration)
             
+            download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
             # 发送Webhook通知
             webhook_service.send_transcription_complete(
                 extra_params=task.extra_params or {},
-                result=result.get('result', {}),
-                # duration=int(audio_duration),
+                result= download_url,  # JSON 文件下载地址
+                code=SUCCESS,
                 use_time=int(time.time() - start_time)
             )
             
@@ -264,7 +267,8 @@ def process_transcription(self, task_id: str):
             # 发送失败情况的Webhook通知
             webhook_service.send_transcription_complete(
                 extra_params=task.extra_params or {},
-                result={"status": "failed", "error": error_msg, "code": error_code},
+                result="",  # 失败时没有 JSON 文件下载地址
+                code=error_code,
                 use_time=int(time.time() - start_time)
             )
             
@@ -312,7 +316,8 @@ def process_transcription(self, task_id: str):
         # 发送异常情况的Webhook通知
         webhook_service.send_transcription_complete(
             extra_params=task.extra_params or {},
-            result={"status": "failed", "error": error_message, "code": error_code},
+            result="",  # 失败时没有 JSON 文件下载地址
+            code=error_code,
             use_time=int(time.time() - start_time)
         )
         

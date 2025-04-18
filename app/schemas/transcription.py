@@ -1,22 +1,6 @@
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field
-from datetime import datetime
 
-class TranscriptionSegment(BaseModel):
-    """
-    转写结果中的时间戳段
-    """
-    start: float = Field(..., description="开始时间（秒）")
-    end: float = Field(..., description="结束时间（秒）")
-    text: str = Field(..., description="文本内容")
-
-class TranscriptionResult(BaseModel):
-    """
-    转写结果
-    """
-    text: str = Field(..., description="完整的转写文本")
-    language: Optional[str] = Field(None, description="检测到的语言代码")
-    segments: List[TranscriptionSegment] = Field(default_factory=list, description="带时间戳的文本片段")
 
 class TranscriptionExtraParams(BaseModel):
     """
@@ -42,6 +26,7 @@ class TranscriptionTask(BaseModel):
     status: str = Field(..., description="任务状态：pending, processing, completed, failed")
     filename: str = Field(..., description="原始文件名")
     file_path: str = Field(..., description="文件存储路径")
+    file_size: Optional[int] = Field(None, description="文件大小（字节）")
     result_path: Optional[str] = Field(None, description="结果文件存储路径")
     language: Optional[str] = Field(None, description="指定的语言（如未指定则为自动检测）")
     created_at: str = Field(..., description="创建时间")
@@ -65,6 +50,7 @@ class TranscriptionTask(BaseModel):
                 "status": "completed",
                 "filename": "meeting.mp3",
                 "file_path": "/uploads/123e4567-e89b-12d3-a456-426614174000.mp3",
+                "file_size": 2048576,
                 "language": "zh",
                 "created_at": "2023-06-15T10:30:00",
                 "started_at": "2023-06-15T10:30:05",
@@ -92,12 +78,13 @@ class TranscriptionTask(BaseModel):
 
 class SimplifiedTranscriptionTask(BaseModel):
     """
-    简化版转写任务详情，去除了一些字段
+    简化版转写任务详情，去除了一些字段，上传完直接返回数据的时候使用
     """
     task_id: str = Field(..., description="任务ID")
     client_id: str = Field(..., description="客户端ID")
     filename: str = Field(..., description="原始文件名")
     file_path: str = Field(..., description="文件存储路径")
+    file_size: Optional[int] = Field(None, description="文件大小（字节）")
     result_path: Optional[str] = Field(None, description="结果文件存储路径")
     created_at: str = Field(..., description="创建时间")
     extra_params: Optional[TranscriptionExtraParams] = Field(None, description="额外参数")
@@ -110,8 +97,11 @@ class SimplifiedTranscriptionTask(BaseModel):
             "example": {
                 "task_id": "123e4567-e89b-12d3-a456-426614174000",
                 "client_id": "client-123",
+                "status": "completed",
                 "filename": "meeting.mp3",
                 "file_path": "/uploads/123e4567-e89b-12d3-a456-426614174000.mp3",
+                "file_size": 2048576,
+                "language": "zh",
                 "created_at": "2023-06-15T10:30:00",
                 "code": 0,
                 "message": "",

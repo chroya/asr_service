@@ -80,7 +80,6 @@ class Settings():
 
     CLEAN_FILE_TIMEOUT= int(os.getenv("CLEAN_FILE_TIMEOUT", "12"))
 
-    SERVER_ID = os.getenv("SERVER_ID", "sz-asr-001")
 
     # 转写任务配置
     MAX_TRANSCRIPTION_RETRY: int = int(os.getenv("MAX_TRANSCRIPTION_RETRY", "3"))  # 转写任务最大重试次数

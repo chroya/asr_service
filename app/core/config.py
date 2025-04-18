@@ -58,6 +58,10 @@ class Settings():
     DEFAULT_USER_LIMIT_COUNT: int = int(os.getenv("DEFAULT_USER_LIMIT_COUNT", "10"))
     DEFAULT_USER_LIMIT_DURATION: int = int(os.getenv("DEFAULT_USER_LIMIT_DURATION", "600"))  # 单位：秒
 
+    # 内容ID验证设置
+    CONTENT_ID_VERIFICATION_ENABLED: bool = os.getenv("CONTENT_ID_VERIFICATION_ENABLED", "False").lower() in ("true", "1", "t")
+    CONTENT_ID_MAX_SAMPLE_SIZE: int = int(os.getenv("CONTENT_ID_MAX_SAMPLE_SIZE", "2097152"))  # 默认2MB
+
     # 云端API设置
     CLOUD_STATS_API_URL: Optional[str] = os.getenv("CLOUD_STATS_API_URL")
     CLOUD_API_KEY: Optional[str] = os.getenv("CLOUD_API_KEY")

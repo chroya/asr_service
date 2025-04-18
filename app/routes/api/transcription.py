@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
 from app.utils.files import validate_audio_file, save_upload_file, get_file_size_bytes, get_file_size_mb
+from app.utils.file_validation import validate_content_id
 from app.utils.error_codes import (
     SUCCESS, ERROR_FILE_NOT_FOUND, ERROR_PROCESSING_FAILED, 
     ERROR_INVALID_FILE_FORMAT, ERROR_FILE_TOO_LARGE, ERROR_FILE_TOO_SMALL,
@@ -166,7 +167,64 @@ async def create_transcription_task(
         
         # 验证必须的参数
         if not all([u_id, task_id, mode_id, ai_mode]):
-            raise ValueError("缺少必要的参数")
+            error_response = SimplifiedTranscriptionTask(
+                task_id=task_id if 'task_id' in locals() else "unknown",
+                client_id=str(u_id) if 'u_id' in locals() else "unknown",
+                filename=file.filename,
+                file_path="",
+                file_size=None,
+                created_at=datetime.now().isoformat(),
+                code=ERROR_PROCESSING_FAILED,
+                message=f"缺少必要的参数",
+                extra_params=TranscriptionExtraParams(
+                    u_id=u_id if 'u_id' in locals() else 0,
+                    record_file_name=file.filename,
+                    task_id=task_id if 'task_id' in locals() else "unknown",
+                    mode_id=mode_id if 'mode_id' in locals() else 0,
+                    language=language if 'language' in locals() else "unknown",
+                    ai_mode=ai_mode if 'ai_mode' in locals() else "unknown",
+                    speaker=speaker if 'speaker' in locals() else False,
+                    whisper_arch=whisper_arch if 'whisper_arch' in locals() else "unknown",
+                    content_id=content_id if 'content_id' in locals() else "unknown",
+                    server_id=server_id if 'server_id' in locals() else "unknown"
+                )
+            )
+            response.status_code = status.HTTP_400_BAD_REQUEST
+            return error_response
+            
+        # 验证内容ID (如果提供了)
+        if content_id and settings.CONTENT_ID_VERIFICATION_ENABLED:
+            # 读取文件内容
+            file_content = await file.read()
+            is_valid = validate_content_id(file_content, u_id, content_id)
+            # 重置文件指针
+            await file.seek(0)
+            
+            if not is_valid:
+                error_response = SimplifiedTranscriptionTask(
+                    task_id=task_id if 'task_id' in locals() else "unknown",
+                    client_id=str(u_id) if 'u_id' in locals() else "unknown",
+                    filename=file.filename,
+                    file_path="",
+                    file_size=None,
+                    created_at=datetime.now().isoformat(),
+                    code=ERROR_PROCESSING_FAILED,
+                    message=f"内容验证失败: {content_id}",
+                    extra_params=TranscriptionExtraParams(
+                        u_id=u_id if 'u_id' in locals() else 0,
+                        record_file_name=file.filename,
+                        task_id=task_id if 'task_id' in locals() else "unknown",
+                        mode_id=mode_id if 'mode_id' in locals() else 0,
+                        language=language if 'language' in locals() else "unknown",
+                        ai_mode=ai_mode if 'ai_mode' in locals() else "unknown",
+                        speaker=speaker if 'speaker' in locals() else False,
+                        whisper_arch=whisper_arch if 'whisper_arch' in locals() else "unknown",
+                        content_id=content_id if 'content_id' in locals() else "unknown",
+                        server_id=server_id if 'server_id' in locals() else "unknown"
+                    )
+                )
+                response.status_code = status.HTTP_400_BAD_REQUEST
+                return error_response
         
     except (json.JSONDecodeError, ValueError) as e:
         error_response = SimplifiedTranscriptionTask(

@@ -16,6 +16,7 @@ class TranscriptionExtraParams(BaseModel):
     whisper_arch: Optional[str] = Field(None, description="使用的Whisper模型名")
     content_id: Optional[str] = Field(None, description="内容ID")
     server_id: Optional[str] = Field(None, description="服务器ID")
+    duration: Optional[float] = Field(None, description="音频时长（秒）")
 
 class TranscriptionTask(BaseModel):
     """

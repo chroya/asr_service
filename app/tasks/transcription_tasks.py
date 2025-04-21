@@ -14,6 +14,7 @@ from app.utils.error_codes import (
     SUCCESS, ERROR_TASK_NOT_FOUND, ERROR_FILE_NOT_FOUND, 
     ERROR_PROCESSING_FAILED, ERROR_MAX_RETRY_EXCEEDED, get_error_message
 )
+from app.utils import get_download_url
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +218,8 @@ def process_transcription(self, task_id: str):
             # 报告任务完成
             cloud_stats_service.report_task_completion(task.client_id, audio_duration)
             
-            download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
+            # 使用结果文件的文件名拼出下载URL
+            download_url = get_download_url(task.result_path)
             # 发送Webhook通知
             webhook_service.send_transcription_complete(
                 extra_params=task.extra_params or {},

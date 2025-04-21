@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from app.core.config import settings
 from app.services.redis_service import RedisService
 from app.schemas.transcription import TranscriptionTask
+from app.utils import get_download_url
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,7 @@ class TaskStatusService:
                     "data": {
                         "trans": {
                             "task_id": task_id,
-                            "results": f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
-                        },
-                        "summary": {
-                            "task_id": task_id,
-                            "results": f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}-summary.md"
+                            "results": get_download_url(f"{task.result_path}")
                         }
                     }
                 })
@@ -89,7 +86,7 @@ class TaskStatusService:
             #         "data": {
             #             "trans": {
             #                 "task_id": task_id,
-            #                 "results": f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
+            #                 "results": get_download_url(f"{task_id}")
             #             }
             #         }
             #     })

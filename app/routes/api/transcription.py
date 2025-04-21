@@ -106,8 +106,9 @@ async def create_transcription_task(
         client_id = str(u_id)
 
         file_path = await save_upload_file(file, task_id)
-        # 创建结果文件路径
-        result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}.json")
+        # 创建结果文件路径，使用taskid和原始文件名（去掉后缀）
+        filename_without_ext = os.path.splitext(filename)[0]
+        result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}_{filename_without_ext}.json")
         
         # 创建任务
         task = transcription_service.create_task(

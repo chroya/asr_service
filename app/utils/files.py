@@ -104,8 +104,7 @@ async def save_upload_file(
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     
     # 确定文件扩展名和保存路径
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    file_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}{file_ext}")
+    file_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{file.filename}")
     
     total_size = 0
     file_size_mb = await get_file_size_mb(file)

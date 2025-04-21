@@ -4,6 +4,7 @@ import os
 import paho.mqtt.client as mqtt
 from typing import Dict, Any, Optional, Callable
 from app.core.config import settings
+from app.utils import get_download_url
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class MQTTService:
         #     }
             
         #     # 构建下载URL
-        #     download_url = f"{settings.BASE_URL}{settings.DOWNLOAD_URL_PREFIX}/{task_id}.json"
+        #     download_url = get_download_url(f"{task_id}.json")
             
         #     # 根据状态码设置data字段
         #     if code == 0:  # 成功状态

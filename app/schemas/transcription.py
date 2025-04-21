@@ -42,6 +42,7 @@ class TranscriptionTask(BaseModel):
     code: int = Field(0, description="状态码：0表示成功，其他值表示失败")
     message: str = Field("", description="状态消息，成功时为空，失败时为错误信息")
     retry_count: int = Field(0, description="重试次数，用于追踪任务被重试的次数")
+    jwt_token: Optional[str] = Field(None, description="JWT令牌，用于webhook回调认证")
 
     class Config:
         json_schema_extra = {

@@ -142,7 +142,8 @@ def process_transcription(self, task_id: str):
             extra_params={},  # 没有任务信息时使用空字典
             result="",  # 失败时没有 JSON 文件下载地址
             code=error_result["code"],
-            use_time=int(time.time() - start_time)
+            use_time=int(time.time() - start_time),
+            jwt_token=task.jwt_token if task else None
         )
         
         return error_result
@@ -189,7 +190,8 @@ def process_transcription(self, task_id: str):
             extra_params=task.extra_params or {},
             result="",  # 失败时没有 JSON 文件下载地址
             code=ERROR_MAX_RETRY_EXCEEDED,
-            use_time=int(time.time() - start_time)
+            use_time=int(time.time() - start_time),
+            jwt_token=task.jwt_token if task else None
         )
         
         return error_result
@@ -225,7 +227,8 @@ def process_transcription(self, task_id: str):
                 extra_params=task.extra_params or {},
                 result= download_url,  # JSON 文件下载地址
                 code=SUCCESS,
-                use_time=int(time.time() - start_time)
+                use_time=int(time.time() - start_time),
+                jwt_token=task.jwt_token if task else None
             )
             
             # 发送成功的MQTT通知
@@ -271,7 +274,8 @@ def process_transcription(self, task_id: str):
                 extra_params=task.extra_params or {},
                 result="",  # 失败时没有 JSON 文件下载地址
                 code=error_code,
-                use_time=int(time.time() - start_time)
+                use_time=int(time.time() - start_time),
+                jwt_token=task.jwt_token if task else None
             )
             
             return error_result
@@ -320,7 +324,8 @@ def process_transcription(self, task_id: str):
             extra_params=task.extra_params or {},
             result="",  # 失败时没有 JSON 文件下载地址
             code=error_code,
-            use_time=int(time.time() - start_time)
+            use_time=int(time.time() - start_time),
+            jwt_token=task.jwt_token if task else None
         )
         
         return error_result 

@@ -75,6 +75,12 @@ async def create_transcription_task(
     content_id = None
     server_id = None
     
+    # 提取JWT token
+    jwt_token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        jwt_token = auth_header.split(" ")[1]
+    
     try:
         # 解析 extra_params JSON 字符串
         params = json.loads(extra_params)
@@ -89,6 +95,7 @@ async def create_transcription_task(
         whisper_arch = params.get("whisper_arch")
         content_id = params.get("content_id")
         server_id = params.get("server_id")
+        duration = params.get("duration")
         
         logger.info(f"收到 POST 请求，extra_params参数为：{params}")
         
@@ -125,7 +132,8 @@ async def create_transcription_task(
             whisper_arch=whisper_arch,
             content_id=content_id,
             server_id=server_id,
-            file_size=file_size_bytes
+            file_size=file_size_bytes,
+            jwt_token=jwt_token  # 保存JWT token到任务中
         )
         
         # 将任务添加到Celery队列

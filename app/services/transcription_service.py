@@ -49,7 +49,9 @@ class TranscriptionService:
         whisper_arch: str = settings.WHISPER_MODEL_NAME,
         content_id: Optional[str] = None,
         server_id: Optional[str] = None,
-        file_size: Optional[int] = None
+        duration: Optional[float] = None,
+        file_size: Optional[int] = None,
+        jwt_token: Optional[str] = None
     ) -> TranscriptionTask:
         """
         创建新的转写任务
@@ -69,6 +71,7 @@ class TranscriptionService:
             content_id: 内容ID
             server_id: 服务器ID
             file_size: 文件大小（字节）
+            jwt_token: JWT令牌（可选）
             
         Returns:
             TranscriptionTask: 创建的任务信息
@@ -84,7 +87,8 @@ class TranscriptionService:
             speaker=speaker,
             whisper_arch=whisper_arch,
             content_id=content_id,
-            server_id=server_id
+            server_id=server_id,
+            duration=duration
         )
         
         # 创建任务数据
@@ -100,7 +104,8 @@ class TranscriptionService:
             created_at=datetime.now().isoformat(),
             extra_params=extra_params.dict() if extra_params else None,
             code=SUCCESS,  # 创建任务时设置为成功状态
-            message=get_error_message(SUCCESS)  # 没有错误信息
+            message=get_error_message(SUCCESS),  # 没有错误信息
+            jwt_token=jwt_token  # 存储JWT令牌
         )
         
         # 存储任务数据

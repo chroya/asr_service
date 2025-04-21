@@ -24,7 +24,8 @@ class WebhookService:
         extra_params: Union[Dict[str, Any], BaseModel],
         result: str,
         code: int,
-        use_time: int
+        use_time: int,
+        jwt_token: Optional[str] = None
     ) -> bool:
         """
         发送转写完成的webhook通知
@@ -34,6 +35,7 @@ class WebhookService:
             result: JSON文件下载地址
             code: 错误码，0表示成功
             use_time: 任务耗时，单位为秒
+            jwt_token: JWT令牌，用于认证
             
         Returns:
             bool: 发送是否成功
@@ -54,15 +56,22 @@ class WebhookService:
             logger.info(f"发送webhook通知: {self.webhook_url}")
             logger.debug(f"Webhook数据: {json.dumps(webhook_data)}")
             
+            # 准备请求头
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            
+            # 如果有JWT令牌，添加到请求头
+            if jwt_token:
+                headers["Authorization"] = f"Bearer {jwt_token}"
+            
             # 发送POST请求
             response = requests.post(
                 self.webhook_url,
                 json=webhook_data,  # requests会自动处理JSON序列化
                 timeout=self.timeout,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept":"application/json"
-                }
+                headers=headers
             )
             
             # 检查响应

@@ -173,7 +173,7 @@ async def create_transcription_task(
             content_id=content_id,
             server_id=server_id
         )
-        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.status_code = status.HTTP_200_OK
         return error_response
 
 @router.get("/download/{task_id}", response_class=Response)
@@ -207,7 +207,7 @@ async def download_result_file(
         return Response(
             content=json.dumps(error_response, ensure_ascii=False),
             media_type="application/json",
-            status_code=status.HTTP_404_NOT_FOUND
+            status_code=status.HTTP_200_OK
         )
     
     # 读取文件内容
@@ -441,7 +441,7 @@ async def validate_params_and_file(
             content_id=content_id,
             server_id=server_id
         )
-        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.status_code = status.HTTP_200_OK
         return None, error_response
     
     # 验证内容ID
@@ -467,7 +467,7 @@ async def validate_params_and_file(
                 content_id=content_id,
                 server_id=server_id
             )
-            response.status_code = status.HTTP_400_BAD_REQUEST
+            response.status_code = status.HTTP_200_OK
             return None, error_response
     
     # 验证文件格式
@@ -486,7 +486,7 @@ async def validate_params_and_file(
             content_id=content_id,
             server_id=server_id
         )
-        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.status_code = status.HTTP_200_OK
         return None, error_response
     
     # 检查文件大小
@@ -510,7 +510,7 @@ async def validate_params_and_file(
             content_id=content_id,
             server_id=server_id
         )
-        response.status_code = status.HTTP_400_BAD_REQUEST
+        response.status_code = status.HTTP_200_OK
         return None, error_response
     
     # 检查文件是否太大
@@ -530,7 +530,7 @@ async def validate_params_and_file(
             content_id=content_id,
             server_id=server_id
         )
-        response.status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        response.status_code = status.HTTP_200_OK
         return None, error_response
     
     # 返回验证通过的参数和文件大小

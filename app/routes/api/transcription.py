@@ -13,6 +13,7 @@ from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
 from app.utils.files import validate_audio_file, save_upload_file, get_file_size_bytes, get_file_size_mb
 from app.utils.file_validation import validate_content_id
+from app.utils.ecm_to_wav import ecm_to_wav  # 导入ecm转wav函数
 from app.utils.error_codes import (
     SUCCESS, ERROR_FILE_NOT_FOUND, ERROR_PROCESSING_FAILED, 
     ERROR_INVALID_FILE_FORMAT, ERROR_FILE_TOO_LARGE, ERROR_FILE_TOO_SMALL,
@@ -49,7 +50,7 @@ async def create_transcription_task(
     Authorization: Bearer <your_jwt_token>
     
     参数:
-        file: 要转写的音频文件
+        file: 要转写的音频文件（支持标准音频格式和ECM格式）
         extra_params: JSON字符串，包含额外参数:
             {
                 "u_id": 用户ID (必须),
@@ -108,11 +109,13 @@ async def create_transcription_task(
         whisper_arch = validated_params.get("whisper_arch")
         file_size_bytes = validated_params.get("file_size_bytes")
 
-        # 保存上传的文件
+        # 保存上传的文件（增加ECM格式检测和转换）
         filename = file.filename
         client_id = str(u_id)
 
-        file_path = await save_upload_file(file, task_id)
+        # 使用新的保存函数处理可能的ECM文件
+        file_path = await save_upload_file_with_ecm_check(file, task_id)
+        
         # 创建结果文件路径，使用taskid和原始文件名（去掉后缀）
         filename_without_ext = os.path.splitext(filename)[0]
         result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}_{filename_without_ext}.json")
@@ -132,6 +135,7 @@ async def create_transcription_task(
             whisper_arch=whisper_arch,
             content_id=content_id,
             server_id=server_id,
+            duration=duration,
             file_size=file_size_bytes,
             jwt_token=jwt_token  # 保存JWT token到任务中
         )
@@ -391,6 +395,57 @@ def create_error_response(
         extra_params=extra_params
     )
 
+async def save_upload_file_with_ecm_check(file: UploadFile, task_id: str) -> str:
+    """
+    保存上传的文件，并检查是否为ECM格式，如果是则转换为WAV
+    
+    Args:
+        file: 上传的文件对象
+        task_id: 任务ID
+    
+    Returns:
+        str: 保存的文件路径（对于ECM格式会返回转换后的WAV路径）
+    """
+    # 获取原始文件名和后缀
+    original_filename = file.filename
+    filename_without_ext, file_ext = os.path.splitext(original_filename)
+    
+    # 保存原始文件以检查格式
+    temp_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_temp")
+    with open(temp_path, "wb") as buffer:
+        # 读取文件的前20个字节来检查是否为ECM格式
+        header = await file.read(20)
+        await file.seek(0)  # 重置文件指针
+        
+        # 写入临时文件
+        shutil.copyfileobj(file.file, buffer)
+    
+    # 检查是否为ECM格式 (0x45, 0x43, 0x4D 对应 'E', 'C', 'M')
+    is_ecm = (header[0] == 0x45 and header[1] == 0x43 and header[2] == 0x4D)
+    
+    if is_ecm:
+        logger.info(f"检测到ECM格式文件: {file.filename}")
+        # 为转换后的WAV文件创建路径，使用格式 taskid_filename.wav
+        wav_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{filename_without_ext}.wav")
+        # 调用转换函数
+        try:
+            ecm_to_wav(temp_path, wav_path)
+            logger.info(f"ECM文件已成功转换为WAV: {wav_path}")
+            # 删除临时的ECM文件
+            os.remove(temp_path)
+            return wav_path
+        except Exception as e:
+            logger.error(f"ECM转WAV失败: {str(e)}")
+            # 转换失败时，仍然使用原始文件但保持指定的命名格式
+            final_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{filename_without_ext}{file_ext}")
+            os.rename(temp_path, final_path)
+            return final_path
+    else:
+        # 如果不是ECM格式，使用标准命名格式
+        final_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{filename_without_ext}{file_ext}")
+        os.rename(temp_path, final_path)
+        return final_path
+
 async def validate_params_and_file(
     file: UploadFile,
     params_dict: Dict[str, Any],
@@ -470,24 +525,32 @@ async def validate_params_and_file(
             response.status_code = status.HTTP_200_OK
             return None, error_response
     
-    # 验证文件格式
-    if not await validate_audio_file(file):
-        error_response = create_error_response(
-            file_filename=file.filename,
-            code=ERROR_INVALID_FILE_FORMAT,
-            message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT],
-            u_id=u_id,
-            task_id=task_id,
-            mode_id=mode_id,
-            language=language,
-            ai_mode=ai_mode,
-            speaker=speaker,
-            whisper_arch=whisper_arch,
-            content_id=content_id,
-            server_id=server_id
-        )
-        response.status_code = status.HTTP_200_OK
-        return None, error_response
+    # 检查文件前20个字节，判断是否为ECM格式
+    header = await file.read(20)
+    await file.seek(0)  # 重置文件指针
+    
+    is_ecm = (len(header) >= 3 and header[0] == 0x45 and header[1] == 0x43 and header[2] == 0x4D)
+    
+    # 如果是ECM格式，不需要继续验证音频格式
+    if not is_ecm:
+        # 验证文件格式
+        if not await validate_audio_file(file):
+            error_response = create_error_response(
+                file_filename=file.filename,
+                code=ERROR_INVALID_FILE_FORMAT,
+                message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT],
+                u_id=u_id,
+                task_id=task_id,
+                mode_id=mode_id,
+                language=language,
+                ai_mode=ai_mode,
+                speaker=speaker,
+                whisper_arch=whisper_arch,
+                content_id=content_id,
+                server_id=server_id
+            )
+            response.status_code = status.HTTP_200_OK
+            return None, error_response
     
     # 检查文件大小
     file_size_bytes = await get_file_size_bytes(file)

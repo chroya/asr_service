@@ -53,8 +53,8 @@ class WebhookService:
                 "use_time": use_time
             }))
             
-            logger.info(f"发送webhook通知: {self.webhook_url}")
-            logger.debug(f"Webhook数据: {json.dumps(webhook_data)}")
+            # logger.info(f"发送webhook通知: {self.webhook_url}")
+            logger.info(f"发送Webhook通知: {json.dumps(webhook_data)}")
             
             # 准备请求头
             headers = {

@@ -83,7 +83,7 @@ async def get_file_size_mb(file: UploadFile) -> float:
 
 async def save_upload_file(
     file: UploadFile,
-    task_id: str,
+    uni_key: str,
     progress_callback: Optional[Callable[[float], None]] = None,
     return_size: bool = False
 ) -> str:
@@ -92,7 +92,7 @@ async def save_upload_file(
     
     Args:
         file: 上传的文件对象
-        task_id: 任务ID，用于命名文件
+        uni_key: 任务唯一标识符，用于命名文件
         progress_callback: 进度回调函数，参数为上传进度(0-100)
         return_size: 是否返回文件大小
         
@@ -104,7 +104,7 @@ async def save_upload_file(
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     
     # 确定文件扩展名和保存路径
-    file_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{file.filename}")
+    file_path = os.path.join(settings.UPLOAD_DIR, f"{uni_key}_{file.filename}")
     
     total_size = 0
     file_size_mb = await get_file_size_mb(file)
@@ -130,6 +130,8 @@ async def save_upload_file(
                 await asyncio.sleep(0)
         
         logger.info(f"文件保存成功: {file_path}, 大小: {file_size_mb:.2f}MB")
+        if return_size:
+            return (file_path, file_size_mb)
         return file_path
         
     except Exception as e:

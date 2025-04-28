@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import uuid
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 
@@ -76,6 +77,12 @@ class TranscriptionService:
         Returns:
             TranscriptionTask: 创建的任务信息
         """
+        # 生成唯一标识符
+        uni_key = f"uni_{uuid.uuid4()}"
+        
+        # 基于uni_key更新结果文件路径
+        result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{uni_key}.json")
+        
         # 创建额外参数
         extra_params = TranscriptionExtraParams(
             u_id=u_id,
@@ -94,6 +101,7 @@ class TranscriptionService:
         # 创建任务数据
         task = TranscriptionTask(
             task_id=task_id,
+            uni_key=uni_key,
             client_id=client_id,
             status="pending",
             filename=original_filename,
@@ -109,38 +117,38 @@ class TranscriptionService:
         )
         
         # 存储任务数据
-        self.storage.save(task_id, task.model_dump())
+        self.storage.save(uni_key, task.model_dump())
         
         return task
     
-    def get_task(self, task_id: str) -> Optional[TranscriptionTask]:
+    def get_task(self, uni_key: str) -> Optional[TranscriptionTask]:
         """
         获取任务信息
         
         Args:
-            task_id: 任务ID
+            uni_key: 任务唯一标识符
             
         Returns:
             TranscriptionTask: 任务信息，如果不存在则返回None
         """
-        task_data = self.storage.get(task_id)
+        task_data = self.storage.get(uni_key)
         if not task_data:
             return None
         
         return TranscriptionTask(**task_data)
     
-    def update_task(self, task_id: str, **updates) -> Optional[TranscriptionTask]:
+    def update_task(self, uni_key: str, **updates) -> Optional[TranscriptionTask]:
         """
         更新任务信息
         
         Args:
-            task_id: 任务ID
+            uni_key: 任务唯一标识符
             **updates: 要更新的字段
             
         Returns:
             TranscriptionTask: 更新后的任务信息，如果不存在则返回None
         """
-        task_data = self.storage.get(task_id)
+        task_data = self.storage.get(uni_key)
         if not task_data:
             return None
         
@@ -149,21 +157,21 @@ class TranscriptionService:
             task_data[key] = value
         
         # 保存更新后的数据
-        self.storage.save(task_id, task_data)
+        self.storage.save(uni_key, task_data)
         
         return TranscriptionTask(**task_data)
     
-    def delete_task(self, task_id: str) -> bool:
+    def delete_task(self, uni_key: str) -> bool:
         """
         删除任务
         
         Args:
-            task_id: 任务ID
+            uni_key: 任务唯一标识符
             
         Returns:
             bool: 是否成功删除
         """
-        task = self.get_task(task_id)
+        task = self.get_task(uni_key)
         if not task:
             return False
         
@@ -172,38 +180,37 @@ class TranscriptionService:
             try:
                 os.remove(task.file_path)
             except Exception as e:
-                logger.error(f"删除任务文件失败 {task_id}: {str(e)}")
+                logger.error(f"删除任务文件失败 {uni_key}: {str(e)}")
         
-        # 删除结果文件
-        result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}.json")
-        if os.path.exists(result_path):
+        # 删除结果文件，使用uni_key作为文件名
+        if task.result_path and os.path.exists(task.result_path):
             try:
-                os.remove(result_path)
+                os.remove(task.result_path)
             except Exception as e:
-                logger.error(f"删除结果文件失败 {task_id}: {str(e)}")
+                logger.error(f"删除结果文件失败 {uni_key}: {str(e)}")
         
         # 删除任务数据
-        self.storage.delete(task_id)
+        self.storage.delete(uni_key)
         
         return True
     
-    def reset_task(self, task_id: str) -> Optional[TranscriptionTask]:
+    def reset_task(self, uni_key: str) -> Optional[TranscriptionTask]:
         """
         重置任务状态，准备重新处理
         
         Args:
-            task_id: 任务ID
+            uni_key: 任务唯一标识符
             
         Returns:
             TranscriptionTask: 重置后的任务信息
         """
-        task = self.get_task(task_id)
+        task = self.get_task(uni_key)
         if not task:
             return None
         
         # 更新任务状态
         task = self.update_task(
-            task_id,
+            uni_key,
             status="pending",
             progress=0,
             error_message=None,
@@ -216,10 +223,10 @@ class TranscriptionService:
         
         return task
     
-    def _update_progress(self, task_id: str, progress: int, message: str) -> None:
+    def _update_progress(self, uni_key: str, progress: int, message: str) -> None:
         """更新任务进度"""
         self.update_task(
-            task_id,
+            uni_key,
             progress=progress,
             progress_message=message
         )
@@ -227,33 +234,23 @@ class TranscriptionService:
     '''
     同步方法，在celery中使用
     '''
-    def process_task_sync(self, task_id: str) -> Dict[str, Any]:
+    def process_task_sync(self, uni_key: str) -> Dict[str, Any]:
         """
         同步处理转写任务
         
         Args:
-            task_id: 任务ID
+            uni_key: 任务唯一标识符
             
         Returns:
-            Dict[str, Any]: 处理结果的字典表示，包含：
-                - status: 状态 ('completed' 或 'failed')
-                - error: 错误信息（如果失败）
-                - code: 错误码
-                - result: 处理结果（如果成功）
-                - audio_duration: 音频时长（如果成功）
-                - model_loading_time: 模型加载时间
-                - transcription_time: 转写时间
-                - diarization_time: 说话人分离时间（如果启用）
-                - post_processing_time: 后处理时间
-                - total_processing_time: 总处理时间
+            Dict[str, Any]: 处理结果的字典表示
         """
         # 获取任务信息 - 仅用于获取任务参数，不做存在性检查
-        task = self.get_task(task_id)
+        task = self.get_task(uni_key)
         
         try:
             # 更新任务状态为处理中
             self.update_task(
-                task_id,
+                uni_key,
                 status="processing",
                 started_at=datetime.now().isoformat()
             )
@@ -284,14 +281,14 @@ class TranscriptionService:
             # 开始转写处理
             transcription_start = time.time()
             
-            # 调用处理器处理音频
+            # 调用处理器处理音频，使用uni_key作为文件标识符
             result_data = self.processor.process_audio(
                 task.file_path,
                 task.result_path,
-                task_id,
+                uni_key,  # 使用uni_key替代task_id
                 language=language if language != "auto" else None,
                 speaker_diarization=speaker_diarization,
-                callback=lambda progress, message: self._update_progress(task_id, progress, message),
+                callback=lambda progress, message: self._update_progress(uni_key, progress, message),
                 whisper_arch=whisper_arch
             )
             
@@ -310,7 +307,7 @@ class TranscriptionService:
             
             # 更新任务状态和结果
             self.update_task(
-                task_id,
+                uni_key,
                 status="completed",
                 result=result,
                 completed_at=datetime.now().isoformat(),
@@ -323,8 +320,8 @@ class TranscriptionService:
             )
 
             # 处理完成的log，包括音频时长、处理耗时
-            logger.info(f"Task {task_id} completed. Audio duration: {audio_duration} seconds, Processing time: {processing_time} seconds")
-            logger.info(f"Task {task_id} timings: model_loading={model_loading_time:.2f}s, transcription={transcription_time:.2f}s, diarization={diarization_time:.2f}s, post_processing={post_processing_time:.2f}s")
+            logger.info(f"Task {uni_key} completed. Audio duration: {audio_duration} seconds, Processing time: {processing_time} seconds")
+            logger.info(f"Task {uni_key} timings: model_loading={model_loading_time:.2f}s, transcription={transcription_time:.2f}s, diarization={diarization_time:.2f}s, post_processing={post_processing_time:.2f}s")
             
             return {
                 "status": "completed",
@@ -342,14 +339,14 @@ class TranscriptionService:
             # 更新任务状态为失败
             error_message = str(e)
             self.update_task(
-                task_id,
+                uni_key,
                 status="failed",
                 error_message=error_message,
                 completed_at=datetime.now().isoformat(),
                 code=ERROR_PROCESSING_FAILED,
                 message=get_error_message(ERROR_PROCESSING_FAILED, f"处理失败: {error_message}")
             )
-            logger.exception(f"处理任务失败: {task_id} - {error_message}")
+            logger.exception(f"处理任务失败: {uni_key} - {error_message}")
             return {
                 "status": "failed", 
                 "error": error_message,

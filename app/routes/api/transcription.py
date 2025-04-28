@@ -3,7 +3,7 @@ import os
 import json
 import shutil
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response, Depends, Query
+from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
@@ -113,18 +113,11 @@ async def create_transcription_task(
         filename = file.filename
         client_id = str(u_id)
 
-        # 使用新的保存函数处理可能的ECM文件
-        file_path = await save_upload_file_with_ecm_check(file, task_id)
-        
-        # 创建结果文件路径，使用taskid和原始文件名（去掉后缀）
-        filename_without_ext = os.path.splitext(filename)[0]
-        result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task_id}_{filename_without_ext}.json")
-        
-        # 创建任务
+        # 创建任务以获取uni_key
         task = transcription_service.create_task(
             task_id=task_id,
-            file_path=file_path,
-            result_path=result_path,
+            file_path="",  # 先设置为空，稍后更新
+            result_path="",  # 先设置为空，稍后更新
             original_filename=filename,
             client_id=client_id,
             language=language,
@@ -140,8 +133,21 @@ async def create_transcription_task(
             jwt_token=jwt_token  # 保存JWT token到任务中
         )
         
+        # 使用新的保存函数处理可能的ECM文件
+        file_path = await save_upload_file_with_ecm_check(file, task.uni_key)
+        
+        # 创建结果文件路径，使用uni_key作为文件名
+        result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task.uni_key}.json")
+        
+        # 更新任务的文件路径和结果路径
+        task = transcription_service.update_task(
+            uni_key=task.uni_key,
+            file_path=file_path,
+            result_path=result_path
+        )
+        
         # 将任务添加到Celery队列
-        process_transcription.delay(task_id)
+        process_transcription.delay(task.uni_key)
         
         # 添加速率限制信息到响应头
         add_rate_limit_headers(response, client_id)
@@ -180,33 +186,78 @@ async def create_transcription_task(
         response.status_code = status.HTTP_200_OK
         return error_response
 
-@router.get("/download/{task_id}", response_class=Response)
+@router.get("/download/{uni_key}", response_class=Response)
 async def download_result_file(
-    task_id: str,
+    uni_key: str,
     request: Request,
     response: Response,
-    _: bool = Depends(jwt_auth_middleware)  # 添加JWT鉴权
+    _: bool = Depends(jwt_auth_middleware),  # 添加JWT鉴权
+    transcription_service: TranscriptionService = Depends(get_transcription_service)
 ):
     """
-    通过任务ID和文件名下载转写结果文件
+    通过任务唯一标识符下载转写结果文件
     
     需要在请求头中提供有效的JWT令牌：
     Authorization: Bearer <your_jwt_token>
     """
-    if '.' in task_id:
-        filename = task_id
+    # 检查uni_key是否以.json结尾
+    if uni_key.endswith('.json'):
+        # 直接查找文件
+        file_path = os.path.join(settings.TRANSCRIPTION_DIR, uni_key)
+        if not os.path.exists(file_path):
+            error_response = {
+                "uni_key": uni_key,
+                "status": "failed",
+                "code": ERROR_RESULT_NOT_FOUND,
+                "message": get_error_message(ERROR_RESULT_NOT_FOUND)
+            }
+            return Response(
+                content=json.dumps(error_response, ensure_ascii=False),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
     else:
-        filename = f"{task_id}.json"
-    # 构建文件路径
-    file_path = os.path.join(settings.TRANSCRIPTION_DIR, filename)
+        # 获取任务信息
+        task = transcription_service.get_task(uni_key)
+        
+        # 如果任务不存在
+        if not task:
+            error_response = {
+                "uni_key": uni_key,
+                "status": "failed",
+                "code": ERROR_TASK_NOT_FOUND,
+                "message": get_error_message(ERROR_TASK_NOT_FOUND)
+            }
+            return Response(
+                content=json.dumps(error_response, ensure_ascii=False),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+            
+        # 如果任务未完成
+        if task.status != "completed":
+            error_response = {
+                "uni_key": uni_key,
+                "task_id": task.task_id,
+                "status": "failed",
+                "code": ERROR_TASK_NOT_COMPLETED,
+                "message": get_error_message(ERROR_TASK_NOT_COMPLETED)
+            }
+            return Response(
+                content=json.dumps(error_response, ensure_ascii=False),
+                media_type="application/json",
+                status_code=status.HTTP_200_OK
+            )
+        
+        file_path = task.result_path
     
     # 检查文件是否存在
     if not os.path.exists(file_path):
         error_response = {
-            "task_id": task_id,
+            "uni_key": uni_key,
             "status": "failed",
             "code": ERROR_RESULT_NOT_FOUND,
-            "message": ERROR_MESSAGES[ERROR_RESULT_NOT_FOUND]
+            "message": get_error_message(ERROR_RESULT_NOT_FOUND)
         }
         return Response(
             content=json.dumps(error_response, ensure_ascii=False),
@@ -218,6 +269,9 @@ async def download_result_file(
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
     
+    # 获取文件名
+    filename = os.path.basename(file_path)
+    
     # 返回响应
     return Response(
         content=content,
@@ -227,24 +281,23 @@ async def download_result_file(
         }
     )
 
-# 新增接口：通过task_id和content_id查询server_id
+# 新增接口：通过uni_key和content_id查询server_id
 @router.get("/transcription/server_id")
-async def get_server_id(task_id: str, content_id: str, 
+async def get_server_id(uni_key: str, content_id: str, 
                         _: bool = Depends(jwt_auth_middleware), 
                         transcription_service: TranscriptionService = Depends(get_transcription_service)):
     """
-    根据task_id和content_id查询server_id
+    根据uni_key和content_id查询server_id
     
     Args:
-        server_id: 请求路径中的server_id参数(仅作为路径标识，不实际使用)
-        task_id: 任务ID
+        uni_key: 任务唯一标识符
         content_id: 内容ID
         
     Returns:
         Dict: 包含server_id的响应结果
     """
     # 获取任务信息
-    task = transcription_service.get_task(task_id)
+    task = transcription_service.get_task(uni_key)
     
     # 任务不存在
     if not task:
@@ -395,14 +448,14 @@ def create_error_response(
         extra_params=extra_params
     )
 
-async def save_upload_file_with_ecm_check(file: UploadFile, task_id: str) -> str:
+async def save_upload_file_with_ecm_check(file: UploadFile, uni_key: str) -> str:
     """
     保存上传的文件，并检查是否为ECM格式，如果是则转换为WAV
     
     Args:
         file: 上传的文件对象
-        task_id: 任务ID
-    
+        uni_key: 任务唯一标识符
+        
     Returns:
         str: 保存的文件路径（对于ECM格式会返回转换后的WAV路径）
     """
@@ -411,7 +464,7 @@ async def save_upload_file_with_ecm_check(file: UploadFile, task_id: str) -> str
     filename_without_ext, file_ext = os.path.splitext(original_filename)
     
     # 保存原始文件以检查格式
-    temp_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_temp")
+    temp_path = os.path.join(settings.UPLOAD_DIR, f"{uni_key}_temp")
     with open(temp_path, "wb") as buffer:
         # 读取文件的前20个字节来检查是否为ECM格式
         header = await file.read(20)
@@ -426,7 +479,7 @@ async def save_upload_file_with_ecm_check(file: UploadFile, task_id: str) -> str
     if is_ecm:
         logger.info(f"检测到ECM格式文件: {file.filename}")
         # 为转换后的WAV文件创建路径，使用格式 taskid_filename.wav
-        wav_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{filename_without_ext}.wav")
+        wav_path = os.path.join(settings.UPLOAD_DIR, f"{uni_key}_{filename_without_ext}.wav")
         # 调用转换函数
         try:
             ecm_to_wav(temp_path, wav_path)
@@ -437,12 +490,12 @@ async def save_upload_file_with_ecm_check(file: UploadFile, task_id: str) -> str
         except Exception as e:
             logger.error(f"ECM转WAV失败: {str(e)}")
             # 转换失败时，仍然使用原始文件但保持指定的命名格式
-            final_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{filename_without_ext}{file_ext}")
+            final_path = os.path.join(settings.UPLOAD_DIR, f"{uni_key}_{filename_without_ext}{file_ext}")
             os.rename(temp_path, final_path)
             return final_path
     else:
         # 如果不是ECM格式，使用标准命名格式
-        final_path = os.path.join(settings.UPLOAD_DIR, f"{task_id}_{filename_without_ext}{file_ext}")
+        final_path = os.path.join(settings.UPLOAD_DIR, f"{uni_key}_{filename_without_ext}{file_ext}")
         os.rename(temp_path, final_path)
         return final_path
 
@@ -618,3 +671,50 @@ def add_rate_limit_headers(response: Response, client_id: str) -> None:
     #     response.headers["X-Rate-Reset-Requests"] = str(rate_limit_info.reset_requests)
     #     if rate_limit_info.retry_after:
     #         response.headers["Retry-After"] = str(rate_limit_info.retry_after)
+
+@router.delete("/task/{uni_key}")
+async def delete_task(
+    uni_key: str,
+    transcription_service: TranscriptionService = Depends(get_transcription_service)
+):
+    """
+    删除转写任务及相关文件
+    
+    Args:
+        uni_key: 任务唯一标识符
+    """
+    # 尝试删除任务
+    success = transcription_service.delete_task(uni_key)
+    
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail="任务不存在或删除失败"
+        )
+    
+    return {"success": True, "message": "任务已成功删除"}
+
+@router.post("/retry_task/{uni_key}")
+async def retry_task(
+    uni_key: str,
+    transcription_service: TranscriptionService = Depends(get_transcription_service)
+):
+    """
+    重试转写任务
+    
+    Args:
+        uni_key: 任务唯一标识符
+    """
+    # 重置任务状态
+    task = transcription_service.reset_task(uni_key)
+    
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="任务不存在或重置失败"
+        )
+    
+    # 将任务添加到Celery队列
+    process_transcription.delay(uni_key)
+    
+    return {"success": True, "message": "任务已重新提交处理"}

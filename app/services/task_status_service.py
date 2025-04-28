@@ -13,16 +13,15 @@ class TaskStatusService:
         redis_service = RedisService()
         self.redis = redis_service.get_client(prefix="transcription:")
         
-    async def get_task_status(self, task_id: str) -> Dict[str, Any]:
+    async def get_task_status(self, uni_key: str) -> Dict[str, Any]:
         """
         获取任务状态
-        :param task_id: 任务ID
+        :param uni_key: 任务唯一标识符
         :return: 任务状态信息
         """
         try:
-            # 从Redis获取任务信息
-            task_data = self.redis.get(task_id)
-            
+            # 获取任务数据
+            task_data = self.redis.get(uni_key)
             if not task_data:
                 return {
                     "code": -4,
@@ -36,7 +35,7 @@ class TaskStatusService:
             # 构建基础响应
             response = {
                 "code": task.code,
-                "task_id": task_id
+                "task_id": task.task_id
             }
             
             # 根据任务状态构建响应
@@ -45,7 +44,7 @@ class TaskStatusService:
                     "msg": "任务完成",
                     "data": {
                         "trans": {
-                            "task_id": task_id,
+                            "task_id": task.task_id,
                             "results": get_download_url(f"{task.result_path}")
                         }
                     }
@@ -59,7 +58,8 @@ class TaskStatusService:
                 response.update({
                     "code": 2,
                     "msg": "上传完成，正在转写",
-                    "progress": task.progress
+                    "progress": task.progress,
+                    "progress_message": task.progress_message
                 })
             elif task.status == "failed":
                 if task.code == -1:
@@ -79,18 +79,6 @@ class TaskStatusService:
                         "msg": task.message or "处理失败"
                     })
             
-            # TODO 如果转写完成但总结未完成
-            # if task.status == "completed" and not task.result.get("summary"):
-            #     response.update({
-            #         "msg": "转写完成",
-            #         "data": {
-            #             "trans": {
-            #                 "task_id": task_id,
-            #                 "results": get_download_url(f"{task_id}")
-            #             }
-            #         }
-            #     })
-                
             return response
             
         except Exception as e:
@@ -100,12 +88,12 @@ class TaskStatusService:
                 detail=f"查询失败: {str(e)}"
             )
             
-    async def get_tasks(self, task_ids: Optional[List[str]] = None, limit: int = 10, offset: int = 0) -> List[TranscriptionTask]:
+    async def get_tasks(self, uni_keys: Optional[List[str]] = None, limit: int = 10, offset: int = 0) -> List[TranscriptionTask]:
         """
         获取任务列表
         
         Args:
-            task_ids: 指定的任务ID列表，如果为None则获取所有任务
+            uni_keys: 指定的任务唯一标识符列表，如果为None则获取所有任务
             limit: 返回的最大任务数量
             offset: 偏移量
             
@@ -113,19 +101,14 @@ class TaskStatusService:
             List[TranscriptionTask]: 任务列表
         """
         try:
-            # 获取所有任务ID列表
-            all_task_ids = self.redis.get_keys("*") or []
-            
-            # 如果指定了task_ids，则只获取这些任务
-            if task_ids:
-                all_task_ids = [tid for tid in all_task_ids if tid in task_ids]
-            
-            # 获取所有任务的详细信息
+            # 获取所有任务
             all_tasks = []
-            for task_id in all_task_ids:
-                task_data = self.redis.get(task_id)
+            for key in self.redis.get_keys("*"):
+                task_data = self.redis.get(key)
                 if task_data:
-                    all_tasks.append(TranscriptionTask(**task_data))
+                    task = TranscriptionTask(**task_data)
+                    if not uni_keys or task.uni_key in uni_keys:
+                        all_tasks.append(task)
             
             # 按创建时间倒序排序所有任务
             all_tasks.sort(key=lambda x: x.created_at, reverse=True)
@@ -142,12 +125,12 @@ class TaskStatusService:
                 detail=f"获取任务列表失败: {str(e)}"
             )
 
-    async def get_task_detail(self, task_id: str) -> TranscriptionTask:
+    async def get_task_detail(self, uni_key: str) -> TranscriptionTask:
         """
         获取任务详细信息
         
         Args:
-            task_id: 任务ID
+            uni_key: 任务唯一标识符
             
         Returns:
             TranscriptionTask: 任务详细信息
@@ -156,10 +139,8 @@ class TaskStatusService:
             HTTPException: 当任务不存在或查询失败时
         """
         try:
-            # 从Redis获取任务信息
-            task_data = self.redis.get(task_id)
-            logger.debug(f"Task data from Redis: {task_data}")  # 添加调试日志
-            
+            # 获取任务数据
+            task_data = self.redis.get(uni_key)
             if not task_data:
                 raise HTTPException(
                     status_code=404,
@@ -168,13 +149,12 @@ class TaskStatusService:
             
             # 将Redis数据转换为TranscriptionTask对象
             task = TranscriptionTask(**task_data)
-            logger.debug(f"Converted task: {task}")  # 添加调试日志
             return task
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error in get_task_detail: {str(e)}")  # 添加调试日志
+            logger.error(f"Error in get_task_detail: {str(e)}")
             raise HTTPException(
                 status_code=500,
                 detail=f"获取任务详情失败: {str(e)}"

@@ -29,6 +29,7 @@ MAX_RETRY_COUNT = settings.MAX_TRANSCRIPTION_RETRY
 def create_task_result(
     status: str,
     task_id: str,
+    uni_key: str,
     error: Optional[str] = None,
     timings: Optional[Dict[str, float]] = None,
     code: int = SUCCESS,
@@ -40,6 +41,7 @@ def create_task_result(
     Args:
         status: 任务状态 ('completed', 'failed', 'processing')
         task_id: 任务ID
+        uni_key: 任务唯一标识符
         error: 错误信息(如果有)
         timings: 各步骤耗时信息
         code: 错误码
@@ -51,6 +53,7 @@ def create_task_result(
     result = {
         "status": status,
         "task_id": task_id,
+        "uni_key": uni_key,
         "timestamp": time.time(),
         "code": code
     }
@@ -66,12 +69,12 @@ def create_task_result(
     
     return result
 
-def check_task_prerequisites(task_id: str, start_time: float) -> Tuple[Optional[Dict], Optional[Dict]]:
+def check_task_prerequisites(uni_key: str, start_time: float) -> Tuple[Optional[Dict], Optional[Dict]]:
     """
     检查任务的前置条件（任务是否存在，文件是否存在等）
     
     Args:
-        task_id: 任务ID
+        uni_key: 任务唯一标识符
         start_time: 任务开始时间
         
     Returns:
@@ -80,11 +83,12 @@ def check_task_prerequisites(task_id: str, start_time: float) -> Tuple[Optional[
         如果检查失败，返回 (None, error_result)
     """
     # 获取任务信息
-    task = transcription_service.get_task(task_id)
+    task = transcription_service.get_task(uni_key)
     if not task:
         error_result = create_task_result(
             status="failed",
-            task_id=task_id,
+            task_id="unknown",  # 任务不存在时无法获取task_id
+            uni_key=uni_key,
             error="任务不存在",
             code=ERROR_TASK_NOT_FOUND,
             timings={"task_received": time.time() - start_time}
@@ -94,7 +98,7 @@ def check_task_prerequisites(task_id: str, start_time: float) -> Tuple[Optional[
     # 检查文件是否存在
     if not os.path.exists(task.file_path):
         transcription_service.update_task(
-            task_id,
+            uni_key,
             status="failed",
             error_message=get_error_message(ERROR_FILE_NOT_FOUND),
             code=ERROR_FILE_NOT_FOUND,
@@ -102,7 +106,8 @@ def check_task_prerequisites(task_id: str, start_time: float) -> Tuple[Optional[
         )
         error_result = create_task_result(
             status="failed",
-            task_id=task_id,
+            task_id=task.task_id,
+            uni_key=uni_key,
             error=get_error_message(ERROR_FILE_NOT_FOUND),
             code=ERROR_FILE_NOT_FOUND,
             timings={
@@ -115,24 +120,24 @@ def check_task_prerequisites(task_id: str, start_time: float) -> Tuple[Optional[
     return task, None
 
 @celery_app.task(name="process_transcription", bind=True)
-def process_transcription(self, task_id: str):
+def process_transcription(self, uni_key: str):
     """
     使用Celery处理转写任务
     
     Args:
         self: Celery任务实例
-        task_id: 任务ID
+        uni_key: 任务唯一标识符
     """
     # 记录任务开始时间
     start_time = time.time()
-    logger.info(f"开始处理转写任务: {task_id}")
+    logger.info(f"开始处理转写任务: {uni_key}")
     
     # 检查任务前置条件
-    task, error_result = check_task_prerequisites(task_id, start_time)
+    task, error_result = check_task_prerequisites(uni_key, start_time)
     if error_result:
         # 发送失败通知
         get_mqtt_service().send_transcription_complete(
-            task_id, 
+            task_id=error_result.get("task_id", "unknown"),
             code=error_result["code"],
             message=error_result["error"]
         )
@@ -150,69 +155,58 @@ def process_transcription(self, task_id: str):
     
     # 检查重试次数
     current_retry_count = task.retry_count
-    logger.info(f"任务 {task_id} 当前重试次数: {current_retry_count}")
+    logger.info(f"任务 {uni_key} 当前重试次数: {current_retry_count}")
     
-    # 如果重试次数超过最大限制，将任务标记为失败
+    # 如果重试次数超过最大值，标记为失败并返回
     if current_retry_count >= MAX_RETRY_COUNT:
-        error_msg = f"任务重试次数已达上限 ({MAX_RETRY_COUNT}次)"
-        logger.warning(f"任务 {task_id} {error_msg}")
+        error_msg = f"任务重试次数已达上限({MAX_RETRY_COUNT}次)"
         
-        # 更新任务状态为失败
+        # 更新任务状态
         transcription_service.update_task(
-            task_id,
+            uni_key,
             status="failed",
             error_message=error_msg,
             code=ERROR_MAX_RETRY_EXCEEDED,
-            message=get_error_message(ERROR_MAX_RETRY_EXCEEDED)
-        )
-        
-        # 创建失败结果
-        error_result = create_task_result(
-            status="failed",
-            task_id=task_id,
-            error=error_msg,
-            code=ERROR_MAX_RETRY_EXCEEDED,
-            timings={
-                "task_received": time.time() - start_time,
-                "total_time": time.time() - start_time
-            }
+            message=get_error_message(ERROR_MAX_RETRY_EXCEEDED, error_msg)
         )
         
         # 发送失败通知
         get_mqtt_service().send_transcription_complete(
-            task_id, 
+            task_id=task.task_id,
             code=ERROR_MAX_RETRY_EXCEEDED,
             message=error_msg
         )
         
-        # 发送失败的Webhook通知 - 重试次数超限
+        # 发送失败的Webhook通知
         webhook_service.send_transcription_complete(
             extra_params=task.extra_params or {},
             result="",  # 失败时没有 JSON 文件下载地址
             code=ERROR_MAX_RETRY_EXCEEDED,
             use_time=int(time.time() - start_time),
-            jwt_token=task.jwt_token if task else None
+            jwt_token=task.jwt_token
+        )
+        
+        error_result = create_task_result(
+            status="failed",
+            task_id=task.task_id,
+            uni_key=uni_key,
+            error=error_msg,
+            code=ERROR_MAX_RETRY_EXCEEDED,
+            timings={"task_received": time.time() - start_time}
         )
         
         return error_result
     
-    # 增加重试次数并更新任务
-    transcription_service.update_task(
-        task_id,
-        retry_count=current_retry_count + 1
-    )
-    logger.info(f"任务 {task_id} 重试次数已更新为: {current_retry_count + 1}")
-    
     try:
         # 更新任务状态为处理中
         transcription_service.update_task(
-            task_id,
+            uni_key,
             status="processing",
             started_at=datetime.now().isoformat()
         )
         
         # 执行转写处理
-        result = transcription_service.process_task_sync(task_id)
+        result = transcription_service.process_task_sync(uni_key)
         
         if result['status'] == 'completed':
             audio_duration = result.get('audio_duration', 0)
@@ -232,12 +226,13 @@ def process_transcription(self, task_id: str):
             )
             
             # 发送成功的MQTT通知
-            get_mqtt_service().send_transcription_complete(task_id, code=SUCCESS)
+            get_mqtt_service().send_transcription_complete(task.task_id, code=SUCCESS)
             
             # 创建成功结果
             return create_task_result(
                 status="completed",
-                task_id=task_id,
+                task_id=task.task_id,
+                uni_key=uni_key,
                 code=SUCCESS,
                 audio_duration=audio_duration,
                 result=result.get('result', {}),
@@ -256,7 +251,8 @@ def process_transcription(self, task_id: str):
             error_code = result.get('code', ERROR_PROCESSING_FAILED)
             error_result = create_task_result(
                 status="failed",
-                task_id=task_id,
+                task_id=task.task_id,
+                uni_key=uni_key,
                 error=error_msg,
                 code=error_code,
                 timings={"total_time": time.time() - start_time}
@@ -264,7 +260,7 @@ def process_transcription(self, task_id: str):
             
             # 发送失败的MQTT通知
             get_mqtt_service().send_transcription_complete(
-                task_id, 
+                task.task_id, 
                 code=error_code,
                 message=error_msg
             )
@@ -281,51 +277,52 @@ def process_transcription(self, task_id: str):
             return error_result
             
     except Exception as e:
-        error_message = str(e)
-        logger.exception(f"处理转写任务失败: {task_id} - {error_message}")
+        # 捕获任何未处理的异常
+        error_msg = str(e)
+        logger.exception(f"处理任务异常: {uni_key} - {error_msg}")
         
-        # 获取当前任务状态，以获取可能存在的错误码
-        current_task = transcription_service.get_task(task_id)
-        error_code = current_task.code if current_task else ERROR_PROCESSING_FAILED
-        
-        # 如果任务还存在但没有错误码，则使用 ERROR_PROCESSING_FAILED
-        if error_code == SUCCESS:
-            error_code = ERROR_PROCESSING_FAILED
-        
-        # 更新任务状态为失败
+        # 更新任务状态
         transcription_service.update_task(
-            task_id,
+            uni_key,
             status="failed",
-            error_message=error_message,
-            code=error_code,
-            message=get_error_message(error_code, error_message)
+            error_message=error_msg,
+            code=ERROR_PROCESSING_FAILED,
+            message=get_error_message(ERROR_PROCESSING_FAILED, error_msg)
+        )
+        
+        # 增加重试次数并将任务重新排队（如果未达到最大重试次数）
+        new_retry_count = current_retry_count + 1
+        if new_retry_count < MAX_RETRY_COUNT:
+            # 更新重试计数
+            transcription_service.update_task(uni_key, retry_count=new_retry_count)
+            
+            # 重新排队
+            logger.info(f"重新排队任务 {uni_key}，重试次数: {new_retry_count}/{MAX_RETRY_COUNT}")
+            self.retry(countdown=5, max_retries=MAX_RETRY_COUNT, exc=e)
+        
+        # 发送失败通知
+        get_mqtt_service().send_transcription_complete(
+            task.task_id,
+            code=ERROR_PROCESSING_FAILED,
+            message=error_msg
+        )
+        
+        # 发送失败的Webhook通知
+        webhook_service.send_transcription_complete(
+            extra_params=task.extra_params or {},
+            result="",  # 失败时没有 JSON 文件下载地址
+            code=ERROR_PROCESSING_FAILED,
+            use_time=int(time.time() - start_time),
+            jwt_token=task.jwt_token
         )
         
         error_result = create_task_result(
             status="failed",
-            task_id=task_id,
-            error=error_message,
-            code=error_code,
-            timings={
-                "task_received": time.time() - start_time,
-                "total_time": time.time() - start_time
-            }
-        )
-        
-        # 发送失败通知
-        get_mqtt_service().send_transcription_complete(
-            task_id, 
-            code=error_code,
-            message=error_message
-        )
-        
-        # 发送异常情况的Webhook通知
-        webhook_service.send_transcription_complete(
-            extra_params=task.extra_params or {},
-            result="",  # 失败时没有 JSON 文件下载地址
-            code=error_code,
-            use_time=int(time.time() - start_time),
-            jwt_token=task.jwt_token if task else None
+            task_id=task.task_id,
+            uni_key=uni_key,
+            error=error_msg,
+            code=ERROR_PROCESSING_FAILED,
+            timings={"total_time": time.time() - start_time}
         )
         
         return error_result 

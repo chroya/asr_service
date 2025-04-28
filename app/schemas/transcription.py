@@ -23,6 +23,7 @@ class TranscriptionTask(BaseModel):
     转写任务详情
     """
     task_id: str = Field(..., description="任务ID")
+    uni_key: str = Field(..., description="唯一标识符，用于Redis存储")
     client_id: Optional[str] = Field(None, description="客户端ID")
     status: str = Field(..., description="任务状态：pending, processing, completed, failed")
     filename: str = Field(..., description="原始文件名")
@@ -48,6 +49,7 @@ class TranscriptionTask(BaseModel):
         json_schema_extra = {
             "example": {
                 "task_id": "123e4567-e89b-12d3-a456-426614174000",
+                "uni_key": "uni_123e4567-e89b-12d3-a456-426614174000",
                 "client_id": "client-123",
                 "status": "completed",
                 "filename": "meeting.mp3",

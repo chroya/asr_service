@@ -175,13 +175,15 @@
                     // 根据状态决定可用的操作
                     let actions = '';
                     if (task.status === 'completed') {
-                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.task_id}'">查看详情</button>`;
-                        actions += `<button class="btn btn-sm btn-success me-1" onclick="downloadResult('${task.task_id}')">下载结果</button>`;
+                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.uni_key}'">查看详情</button>`;
+                        actions += `<button class="btn btn-sm btn-success me-1" onclick="downloadResult('${task.uni_key}')">下载结果</button>`;
                     } else if (task.status === 'failed') {
-                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.task_id}'">查看详情</button>`;
-                        actions += `<button class="btn btn-sm btn-warning me-1" onclick="retryTask('${task.task_id}')">重试</button>`;
+                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.uni_key}'">查看详情</button>`;
+                        actions += `<button class="btn btn-sm btn-warning me-1" onclick="retryTask('${task.uni_key}')">重试</button>`;
+                    } else {
+                        actions = `<button class="btn btn-sm btn-info me-1" onclick="window.location.href='/web/task/${task.uni_key}'">查看详情</button>`;
                     }
-                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteTask('${task.task_id}')">删除</button>`;
+                    actions += `<button class="btn btn-sm btn-danger" onclick="deleteTask('${task.uni_key}')">删除</button>`;
                     
                     html += `
                     <tr>
@@ -216,53 +218,50 @@
     }
     
     // 下载结果
-    function downloadResult(taskId) {
-        window.open(`/api/download/${taskId}`, '_blank');
+    function downloadResult(uniKey) {
+        window.open(`/api/download/${uniKey}`, '_blank');
     }
     
     // 重试任务
-    function retryTask(taskId) {
+    function retryTask(uniKey) {
         if (!confirm('确定要重试此任务吗？')) {
             return;
         }
         
         showLoading();
         
-        fetch(`/api/task/${taskId}/retry`, {
-            method: 'POST'
-        })
-        .then(response => {
-            if (response.ok) {
-                showToast('任务已重新提交处理', 'success');
-                loadTasks();
-            } else {
-                return response.json().then(data => {
-                    throw new Error(data.detail || '重试任务失败');
-                });
-            }
-        })
-        .catch(error => {
-            showToast(error.message, 'error');
-        })
-        .finally(() => {
-            hideLoading();
-        });
+        fetch(`/api/retry_task/${uniKey}`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('任务已重新排队，将尽快处理', 'success');
+                    loadTasks();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('重试请求发送失败，请稍后再试', 'error');
+            })
+            .finally(() => {
+                hideLoading();
+            });
     }
     
     // 删除任务
-    function deleteTask(taskId) {
-        if (!confirm('确定要删除这个任务吗？这将同时删除相关的音频和转写结果文件。')) {
+    function deleteTask(uniKey) {
+        if (!confirm('确定要删除此任务吗？删除后将无法恢复！')) {
             return;
         }
         
         showLoading();
         
-        fetch(`/api/task/${taskId}`, {
+        fetch(`/api/task/${uniKey}`, {
             method: 'DELETE'
         })
         .then(response => {
             if (response.ok) {
-                showToast('任务已成功删除', 'success');
+                showToast('任务已删除', 'success');
                 loadTasks();
             } else {
                 return response.json().then(data => {

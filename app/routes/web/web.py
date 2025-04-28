@@ -28,9 +28,9 @@ async def web_tasks(request: Request):
     """
     return templates.TemplateResponse("tasks.html", {"request": request})
 
-@router.get("/task/{task_id}", response_class=HTMLResponse)
-async def web_task_detail(request: Request, task_id: str):
+@router.get("/task/{uni_key}", response_class=HTMLResponse)
+async def web_task_detail(request: Request, uni_key: str):
     """
     任务详情页面
     """
-    return templates.TemplateResponse("task_detail.html", {"request": request, "task_id": task_id}) 
+    return templates.TemplateResponse("task_detail.html", {"request": request, "uni_key": uni_key}) 

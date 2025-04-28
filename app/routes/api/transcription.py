@@ -3,6 +3,7 @@ import os
 import json
 import shutil
 import uuid
+import httpx
 from fastapi import APIRouter, UploadFile, File, Form, status, Request, Response, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any, Tuple
@@ -11,6 +12,7 @@ from datetime import datetime
 from app.core.config import settings
 from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
+from app.services.webhook_service import get_webhook_service
 from app.utils.files import validate_audio_file, save_upload_file, get_file_size_bytes, get_file_size_mb
 from app.utils.file_validation import validate_content_id
 from app.utils.ecm_to_wav import ecm_to_wav  # 导入ecm转wav函数
@@ -40,32 +42,13 @@ async def create_transcription_task(
     response: Response,
     file: UploadFile = File(...),
     extra_params: str = Form(...),
-    _: bool = Depends(jwt_auth_middleware),  # 添加JWT鉴权
+    _: bool = Depends(jwt_auth_middleware),
     transcription_service: TranscriptionService = Depends(get_transcription_service)
 ):
     """
-    创建一个新的转写任务
-    
-    需要在请求头中提供有效的JWT令牌：
-    Authorization: Bearer <your_jwt_token>
-    
-    参数:
-        file: 要转写的音频文件（支持标准音频格式和ECM格式）
-        extra_params: JSON字符串，包含额外参数:
-            {
-                "u_id": 用户ID (必须),
-                "record_file_name": 文件名,
-                "task_id": 任务ID(必须),
-                "mode_id": 模型ID(必须),
-                "language": 语言代码,
-                "ai_mode": AI模式(必须),
-                "speaker": 是否启用说话人分离(布尔值),
-                "whisper_arch": whisper模型名,具体见 whisper_arch.py,
-                "content_id": 内容ID,
-                "server_id": 服务器ID
-            }
+    创建一个新的转写任务。所有请求都返回200 OK，错误通过webhook通知。
     """
-    # 初始化变量，防止异常处理中引用错误
+    # 初始化变量
     u_id = None
     task_id = None
     language = "auto"
@@ -81,6 +64,9 @@ async def create_transcription_task(
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         jwt_token = auth_header.split(" ")[1]
+    
+    # 获取webhook服务实例
+    webhook_service = get_webhook_service()
     
     try:
         # 解析 extra_params JSON 字符串
@@ -101,23 +87,44 @@ async def create_transcription_task(
         logger.info(f"收到 POST 请求，extra_params参数为：{params}")
         
         # 验证参数和文件
-        validated_params, error_response = await validate_params_and_file(file, params, response)
-        if error_response:
-            return error_response
+        validated_params = await validate_params_and_file(file, params)
+        if not validated_params:
+            # 发送webhook错误通知
+            webhook_service.send_transcription_complete(
+                extra_params=params,
+                result="参数验证失败",
+                code=ERROR_PROCESSING_FAILED,
+                use_time=0,
+                jwt_token=jwt_token
+            )
+            
+            # 返回错误响应
+            return SimplifiedTranscriptionTask(
+                task_id=task_id if task_id else "unknown",
+                client_id=str(u_id) if u_id else "unknown",
+                filename=file.filename,
+                file_path="",
+                file_size=None,
+                result_path="",
+                created_at=datetime.now().isoformat(),
+                extra_params=params,
+                code=ERROR_PROCESSING_FAILED,
+                message="参数验证失败"
+            )
         
-        # 提取验证后的参数，可能修改的是whisper_arch和file_size_bytes
+        # 提取验证后的参数
         whisper_arch = validated_params.get("whisper_arch")
         file_size_bytes = validated_params.get("file_size_bytes")
 
-        # 保存上传的文件（增加ECM格式检测和转换）
+        # 保存上传的文件
         filename = file.filename
         client_id = str(u_id)
 
         # 创建任务以获取uni_key
         task = transcription_service.create_task(
             task_id=task_id,
-            file_path="",  # 先设置为空，稍后更新
-            result_path="",  # 先设置为空，稍后更新
+            file_path="",
+            result_path="",
             original_filename=filename,
             client_id=client_id,
             language=language,
@@ -130,30 +137,57 @@ async def create_transcription_task(
             server_id=server_id,
             duration=duration,
             file_size=file_size_bytes,
-            jwt_token=jwt_token  # 保存JWT token到任务中
+            jwt_token=jwt_token
         )
         
-        # 使用新的保存函数处理可能的ECM文件
-        file_path = await save_upload_file_with_ecm_check(file, task.uni_key)
+        # 保存文件并处理ECM格式
+        try:
+            file_path = await save_upload_file_with_ecm_check(file, task.uni_key)
+        except Exception as e:
+            error_msg = f"保存文件失败: {str(e)}"
+            logger.error(error_msg)
+            
+            # 发送webhook错误通知
+            webhook_service.send_transcription_complete(
+                extra_params=params,
+                result=error_msg,
+                code=ERROR_PROCESSING_FAILED,
+                use_time=0,
+                jwt_token=jwt_token
+            )
+            
+            # 返回错误响应
+            return SimplifiedTranscriptionTask(
+                task_id=task.task_id,
+                client_id=task.client_id,
+                filename=task.filename,
+                file_path="",
+                file_size=file_size_bytes,
+                result_path="",
+                created_at=task.created_at,
+                extra_params=task.extra_params,
+                code=ERROR_PROCESSING_FAILED,
+                message=error_msg
+            )
         
-        # 创建结果文件路径，使用uni_key作为文件名
+        # 创建结果文件路径
         result_path = os.path.join(settings.TRANSCRIPTION_DIR, f"{task.uni_key}.json")
         
-        # 更新任务的文件路径和结果路径
+        # 更新任务路径
         task = transcription_service.update_task(
             uni_key=task.uni_key,
             file_path=file_path,
             result_path=result_path
         )
         
-        # 将任务添加到Celery队列
+        # 添加到Celery队列
         process_transcription.delay(task.uni_key)
         
-        # 添加速率限制信息到响应头
+        # 添加速率限制信息
         add_rate_limit_headers(response, client_id)
         
-        # 转换为简化版返回对象
-        simplified_task = SimplifiedTranscriptionTask(
+        # 返回成功响应
+        return SimplifiedTranscriptionTask(
             task_id=task.task_id,
             client_id=task.client_id,
             filename=task.filename,
@@ -162,29 +196,47 @@ async def create_transcription_task(
             result_path=task.result_path,
             created_at=task.created_at,
             extra_params=task.extra_params,
-            code=task.code,
-            message=task.message
+            code=SUCCESS,
+            message="任务创建成功"
+        )
+
+    except Exception as e:
+        error_msg = f"处理请求失败: {str(e)}"
+        logger.error(error_msg)
+        
+        # 发送webhook错误通知
+        webhook_service.send_transcription_complete(
+            extra_params={
+                "u_id": u_id,
+                "task_id": task_id,
+                "filename": file.filename if file else "unknown",
+                "mode_id": mode_id,
+                "language": language,
+                "ai_mode": ai_mode,
+                "speaker": speaker,
+                "whisper_arch": whisper_arch,
+                "content_id": content_id,
+                "server_id": server_id
+            },
+            result=error_msg,
+            code=ERROR_PROCESSING_FAILED,
+            use_time=0,
+            jwt_token=jwt_token
         )
         
-        return simplified_task
-
-    except (json.JSONDecodeError, ValueError) as e:
-        error_response = create_error_response(
-            file_filename=file.filename,
+        # 返回错误响应
+        return SimplifiedTranscriptionTask(
+            task_id=task_id if task_id else "unknown",
+            client_id=str(u_id) if u_id else "unknown",
+            filename=file.filename if file else "unknown",
+            file_path="",
+            file_size=None,
+            result_path="",
+            created_at=datetime.now().isoformat(),
+            extra_params=params if 'params' in locals() else None,
             code=ERROR_PROCESSING_FAILED,
-            message=f"解析参数失败: {str(e)}",
-            u_id=u_id,
-            task_id=task_id,
-            mode_id=mode_id,
-            language=language,
-            ai_mode=ai_mode,
-            speaker=speaker,
-            whisper_arch=whisper_arch,
-            content_id=content_id,
-            server_id=server_id
+            message=error_msg
         )
-        response.status_code = status.HTTP_200_OK
-        return error_response
 
 @router.get("/download/{uni_key}", response_class=Response)
 async def download_result_file(
@@ -501,21 +553,17 @@ async def save_upload_file_with_ecm_check(file: UploadFile, uni_key: str) -> str
 
 async def validate_params_and_file(
     file: UploadFile,
-    params_dict: Dict[str, Any],
-    response: Response
-) -> Tuple[Optional[Dict[str, Any]], Optional[SimplifiedTranscriptionTask]]:
+    params_dict: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
     """
     验证参数和文件
     
     Args:
         file: 上传的文件对象
         params_dict: 参数字典
-        response: FastAPI响应对象
     
     Returns:
-        Tuple[Optional[Dict[str, Any]], Optional[SimplifiedTranscriptionTask]]:
-        如果验证通过，返回(参数字典, None)
-        如果验证失败，返回(None, 错误响应)
+        Optional[Dict[str, Any]]: 如果验证通过返回验证后的参数，否则返回None
     """
     # 提取参数
     u_id = params_dict.get("u_id")
@@ -535,22 +583,8 @@ async def validate_params_and_file(
     
     # 验证必须的参数
     if not all([u_id, task_id, mode_id, ai_mode]):
-        error_response = create_error_response(
-            file_filename=file.filename,
-            code=ERROR_PROCESSING_FAILED,
-            message="缺少必要的参数",
-            u_id=u_id,
-            task_id=task_id,
-            mode_id=mode_id,
-            language=language,
-            ai_mode=ai_mode,
-            speaker=speaker,
-            whisper_arch=whisper_arch,
-            content_id=content_id,
-            server_id=server_id
-        )
-        response.status_code = status.HTTP_200_OK
-        return None, error_response
+        logger.error("缺少必要的参数")
+        return None
     
     # 验证内容ID
     if content_id and settings.CONTENT_ID_VERIFICATION_ENABLED:
@@ -561,22 +595,8 @@ async def validate_params_and_file(
         await file.seek(0)
         
         if not is_valid:
-            error_response = create_error_response(
-                file_filename=file.filename,
-                code=ERROR_PROCESSING_FAILED,
-                message=f"内容验证失败: {content_id}",
-                u_id=u_id,
-                task_id=task_id,
-                mode_id=mode_id,
-                language=language,
-                ai_mode=ai_mode,
-                speaker=speaker,
-                whisper_arch=whisper_arch,
-                content_id=content_id,
-                server_id=server_id
-            )
-            response.status_code = status.HTTP_200_OK
-            return None, error_response
+            logger.error(f"内容验证失败: {content_id}")
+            return None
     
     # 检查文件前20个字节，判断是否为ECM格式
     header = await file.read(20)
@@ -588,22 +608,8 @@ async def validate_params_and_file(
     if not is_ecm:
         # 验证文件格式
         if not await validate_audio_file(file):
-            error_response = create_error_response(
-                file_filename=file.filename,
-                code=ERROR_INVALID_FILE_FORMAT,
-                message=ERROR_MESSAGES[ERROR_INVALID_FILE_FORMAT],
-                u_id=u_id,
-                task_id=task_id,
-                mode_id=mode_id,
-                language=language,
-                ai_mode=ai_mode,
-                speaker=speaker,
-                whisper_arch=whisper_arch,
-                content_id=content_id,
-                server_id=server_id
-            )
-            response.status_code = status.HTTP_200_OK
-            return None, error_response
+            logger.error(f"无效的文件格式: {file.filename}")
+            return None
     
     # 检查文件大小
     file_size_bytes = await get_file_size_bytes(file)
@@ -611,47 +617,17 @@ async def validate_params_and_file(
     
     # 检查文件是否太小
     if file_size_bytes < settings.MIN_UPLOAD_SIZE_BYTES:
-        error_response = create_error_response(
-            file_filename=file.filename,
-            code=ERROR_FILE_TOO_SMALL,
-            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_SMALL]}。最小限制: {settings.MIN_UPLOAD_SIZE_BYTES}字节",
-            u_id=u_id,
-            task_id=task_id,
-            file_size=file_size_bytes,
-            mode_id=mode_id,
-            language=language,
-            ai_mode=ai_mode,
-            speaker=speaker,
-            whisper_arch=whisper_arch,
-            content_id=content_id,
-            server_id=server_id
-        )
-        response.status_code = status.HTTP_200_OK
-        return None, error_response
+        logger.error(f"文件太小: {file_size_bytes} 字节")
+        return None
     
     # 检查文件是否太大
     if file_size_mb > settings.MAX_UPLOAD_SIZE_MB:
-        error_response = create_error_response(
-            file_filename=file.filename,
-            code=ERROR_FILE_TOO_LARGE,
-            message=f"{ERROR_MESSAGES[ERROR_FILE_TOO_LARGE]}。最大允许: {settings.MAX_UPLOAD_SIZE_MB}MB",
-            u_id=u_id,
-            task_id=task_id,
-            file_size=file_size_bytes,
-            mode_id=mode_id,
-            language=language,
-            ai_mode=ai_mode,
-            speaker=speaker,
-            whisper_arch=whisper_arch,
-            content_id=content_id,
-            server_id=server_id
-        )
-        response.status_code = status.HTTP_200_OK
-        return None, error_response
+        logger.error(f"文件太大: {file_size_mb} MB")
+        return None
     
     # 返回验证通过的参数和文件大小
     params_dict["file_size_bytes"] = file_size_bytes
-    return params_dict, None
+    return params_dict
 
 def add_rate_limit_headers(response: Response, client_id: str) -> None:
     """

@@ -19,10 +19,11 @@
                 <div class="col-md-6">
                     <p><strong>任务ID:</strong> <span id="task-id"></span></p>
                     <p><strong>文件名:</strong> <span id="filename"></span></p>
-                    <p><strong>创建时间:</strong> <span id="created-at"></span></p>
-                    <p><strong>完成时间:</strong> <span id="completed-at">-</span></p>
+                    <p><strong>任务创建时间:</strong> <span id="created-at"></span></p>
+                    <p><strong>开始处理时间:</strong> <span id="started-at"></span></p>
+                    <p><strong>处理完成时间:</strong> <span id="completed-at">-</span></p>
                     <p><strong>重试次数:</strong> <span id="retry-count">0</span></p>
-                    <p><strong>文件大小:</strong> <span id="file-size">-</span></p>
+                    
                 </div>
                 <div class="col-md-6">
                     <p><strong>状态:</strong> <span id="status-badge"></span></p>
@@ -30,6 +31,7 @@
                     <p><strong>处理耗时:</strong> <span id="processing-time">-</span></p>
                     <p><strong>请求语言:</strong> <span id="language"></span></p>
                     <p><strong>说话人分离:</strong> <span id="diarization">-</span></p>
+                    <p><strong>文件大小:</strong> <span id="file-size">-</span></p>
                 </div>
             </div>
             <div class="row mt-3">
@@ -43,7 +45,7 @@
             </div>
             
             <!-- 处理耗时明细 -->
-            <div class="row mt-3">
+            <!-- <div class="row mt-3">
                 <div class="col-12">
                     <h6>处理耗时明细</h6>
                     <div class="table-responsive">
@@ -71,7 +73,7 @@
                         </table>
                     </div>
                 </div>
-            </div>
+            </div> -->
         </div>
     </div>
     
@@ -162,10 +164,10 @@
             clearInterval(window.pollingTimer);
         }
         
-        // 设置新的轮询计时器，每5秒检查一次任务状态
-        window.pollingTimer = setInterval(() => {
-            checkTaskStatus(uniKey);
-        }, 5000);
+        // // 设置新的轮询计时器，每5秒检查一次任务状态
+        // window.pollingTimer = setInterval(() => {
+        //     checkTaskStatus(uniKey);
+        // }, 5000);
     }
     
     // 检查任务状态
@@ -174,7 +176,7 @@
             .then(response => response.json())
             .then(data => {
                 console.log('任务状态更新:', data);
-                updateStatus(data);
+                // updateStatus(data);
             })
             .catch(error => {
                 console.error('检查任务状态失败:', error);
@@ -197,8 +199,10 @@
             })
             .then(data => {
                 // 填充基本信息
+                document.getElementById('task-id').textContent = data.task_id || data.uni_key;
                 document.getElementById('filename').textContent = data.filename || '未知';
                 document.getElementById('created-at').textContent = formatDate(data.created_at);
+                document.getElementById('started-at').textContent = formatDate(data.started_at);
                 document.getElementById('completed-at').textContent = data.completed_at ? formatDate(data.completed_at) : '-';
                 document.getElementById('retry-count').textContent = data.retry_count || 0;
                 document.getElementById('file-size').textContent = data.file_size ? formatFileSize(data.file_size) : '-';
@@ -235,19 +239,19 @@
                 // 更新状态徽章
                 updateStatusBadge(data.status);
                 
-                // 隐藏进度条，我们没有progress信息了
+                // 隐藏进度条
                 document.getElementById('progress-card').classList.add('d-none');
                 
                 // 根据状态显示不同内容
-                if (status === 'processing') {
+                if (data.status === 'processing') {
                     // 简化的处理中UI
                     document.getElementById('result-card').classList.add('d-none');
                     document.getElementById('error-card').classList.add('d-none');
                     startPolling(uniKey);
-                } else if (status === 'completed') {
+                } else if (data.status === 'completed') {
                     showCompletedUI(data);
                     stopPolling();
-                } else if (status === 'failed') {
+                } else if (data.status === 'failed') {
                     // 显示错误信息
                     document.getElementById('result-card').classList.add('d-none');
                     const errorCard = document.getElementById('error-card');
@@ -322,43 +326,46 @@
         }
         
         // 获取结果数据
-        fetch(`/api/download/${data.uni_key}`)
+        fetch(`/api/download/${data.uni_key}.json`)
             .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
+                if (!response.ok) {
                     throw new Error('获取转写结果失败');
                 }
+                return response.json();
             })
             .then(segments => {
                 if (!segments || !segments.length) {
                     throw new Error('转写结果为空');
                 }
                 
-                // 更新音频时长
-                // const lastSegment = segments[segments.length - 1];
-                // if (lastSegment.end) {
-                //     const endTime = parseFloat(lastSegment.end.split(':').pop());
-                //     document.getElementById('audio-duration').textContent = formatDuration(endTime);
-                // }
-                
                 // 构建完整文本
                 let fullText = '';
                 segments.forEach(segment => {
-                    fullText += segment.text + ' ';
+                    if (segment.speaker) {
+                        fullText += `[${segment.speaker}] ${segment.text}\n`;
+                    } else {
+                        fullText += `${segment.text}\n`;
+                    }
                 });
-                document.getElementById('full-text').textContent = fullText.trim();
+                
+                // 显示完整文本
+                const fullTextEl = document.getElementById('full-text');
+                fullTextEl.innerHTML = fullText.trim().replace(/\n/g, '<br>');
                 
                 // 填充分段表格
                 const segmentsTable = document.getElementById('segments-table');
                 let html = '';
                 
                 segments.forEach(segment => {
+                    const start = segment.start;
+                    const end = segment.end;
+                    const speaker = segment.speaker ? `<span class="badge bg-info">${segment.speaker}</span> ` : '';
+                    
                     html += `
                         <tr>
-                            <td>${segment.start}</td>
-                            <td>${segment.end}</td>
-                            <td>${segment.text}</td>
+                            <td>${start}</td>
+                            <td>${end}</td>
+                            <td>${speaker}${segment.text}</td>
                         </tr>
                     `;
                 });
@@ -367,8 +374,23 @@
             })
             .catch(error => {
                 console.error('Error loading transcription result:', error);
-                document.getElementById('full-text').textContent = '结果加载失败: ' + error.message;
-                document.getElementById('segments-table').innerHTML = '<tr><td colspan="3" class="text-center text-danger">结果加载失败</td></tr>';
+                // 显示错误信息
+                document.getElementById('full-text').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        结果加载失败: ${error.message}
+                    </div>
+                `;
+                document.getElementById('segments-table').innerHTML = `
+                    <tr>
+                        <td colspan="3">
+                            <div class="alert alert-danger mb-0">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                结果加载失败: ${error.message}
+                            </div>
+                        </td>
+                    </tr>
+                `;
             });
     }
     

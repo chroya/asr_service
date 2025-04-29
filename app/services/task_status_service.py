@@ -106,6 +106,9 @@ class TaskStatusService:
             for key in self.redis.get_keys("*"):
                 task_data = self.redis.get(key)
                 if task_data:
+                    # 确保task_data包含uni_key字段
+                    if 'uni_key' not in task_data:
+                        task_data['uni_key'] = key
                     task = TranscriptionTask(**task_data)
                     if not uni_keys or task.uni_key in uni_keys:
                         all_tasks.append(task)

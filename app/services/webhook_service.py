@@ -44,16 +44,18 @@ class WebhookService:
             # 如果extra_params是Pydantic模型，转换为字典
             if isinstance(extra_params, BaseModel):
                 extra_params = extra_params.model_dump_json()
+            # 如果extra_params是字典，转换为JSON字符串
+            if isinstance(extra_params, dict):
+                extra_params = json.dumps(extra_params)
             
-            # 准备webhook数据并确保使用标准JSON格式（双引号）
-            webhook_data = json.loads(json.dumps({
+            # 准备webhook数据
+            webhook_data = {
                 "extra_params": extra_params,
                 "result": result,
                 "code": code,
                 "use_time": use_time
-            }))
+            }
             
-            # logger.info(f"发送webhook通知: {self.webhook_url}")
             logger.info(f"发送Webhook通知: {json.dumps(webhook_data)}")
             
             # 准备请求头
@@ -69,7 +71,7 @@ class WebhookService:
             # 发送POST请求
             response = requests.post(
                 self.webhook_url,
-                json=webhook_data,  # requests会自动处理JSON序列化
+                json=webhook_data,
                 timeout=self.timeout,
                 headers=headers
             )
@@ -79,7 +81,6 @@ class WebhookService:
                 logger.info(f"Webhook发送成功: {response.status_code}")
                 return True
             else:
-                # logger.warning(f"Webhook发送失败: 状态码 {response.status_code}")
                 logger.warning(f"Webhook发送失败: 状态码 {response.status_code}, 响应: {response.text}")
                 return False
                 

@@ -14,6 +14,7 @@ from app.utils.error_codes import (
      SUCCESS, ERROR_PROCESSING_FAILED, get_error_message
 )
 from app.schemas.transcription import TranscriptionTask, TranscriptionExtraParams
+from app.utils.gpu_monitor import get_gpu_memory_info, get_celery_concurrency
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +306,19 @@ class TranscriptionService:
             processing_time = time.time() - start_time
             post_processing_time = time.time() - post_processing_start
             
+            # 获取GPU信息和Celery并发数
+            total_gpu_memory, free_gpu_memory = get_gpu_memory_info()
+            celery_concurrency = get_celery_concurrency()
+            
+            # 准备额外参数，包含GPU信息和Celery并发数
+            extra_params_dict = task.extra_params
+            if isinstance(extra_params_dict, dict):
+                extra_params_dict.update({
+                    "total_gpu_memory": total_gpu_memory,
+                    "free_gpu_memory": free_gpu_memory,
+                    "oncurrency": celery_concurrency
+                })
+            
             # 更新任务状态和结果
             self.update_task(
                 uni_key,
@@ -316,12 +330,14 @@ class TranscriptionService:
                 progress=100,
                 progress_message="处理完成",
                 code=SUCCESS,  # 成功状态码
-                message=get_error_message(SUCCESS)  # 成功状态消息为空
+                message=get_error_message(SUCCESS),  # 成功状态消息为空
+                extra_params=extra_params_dict  # 更新额外参数
             )
 
-            # 处理完成的log，包括音频时长、处理耗时
+            # 处理完成的log，包括音频时长、处理耗时和GPU信息
             logger.info(f"Task {uni_key} completed. Audio duration: {audio_duration} seconds, Processing time: {processing_time} seconds")
             logger.info(f"Task {uni_key} timings: model_loading={model_loading_time:.2f}s, transcription={transcription_time:.2f}s, diarization={diarization_time:.2f}s, post_processing={post_processing_time:.2f}s")
+            logger.info(f"Task {uni_key} GPU info: total={total_gpu_memory}MB, free={free_gpu_memory}MB, concurrency={celery_concurrency}")
             
             return {
                 "status": "completed",
@@ -332,7 +348,10 @@ class TranscriptionService:
                 "transcription_time": transcription_time,
                 "diarization_time": diarization_time,
                 "post_processing_time": post_processing_time,
-                "total_processing_time": processing_time
+                "total_processing_time": processing_time,
+                "total_gpu_memory": total_gpu_memory,
+                "free_gpu_memory": free_gpu_memory,
+                "concurrency": celery_concurrency
             }
                 
         except Exception as e:

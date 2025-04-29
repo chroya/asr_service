@@ -17,6 +17,9 @@ class TranscriptionExtraParams(BaseModel):
     content_id: Optional[str] = Field(None, description="内容ID")
     server_id: Optional[str] = Field(None, description="服务器ID")
     duration: Optional[float] = Field(None, description="音频时长（秒）")
+    total_gpu_memory: Optional[float] = Field(None, description="总显存（MB）")
+    free_gpu_memory: Optional[float] = Field(None, description="剩余显存（MB）")
+    concurrency: Optional[int] = Field(None, description="Celery并发进程数")
 
 class TranscriptionTask(BaseModel):
     """

@@ -23,8 +23,13 @@ class TranscriptionService:
     转写服务：管理音频转写任务，包括任务创建、获取、删除等操作
     """
     
-    def __init__(self):
-        """初始化转写服务"""
+    def __init__(self, preload_model: bool = True):
+        """
+        初始化转写服务
+        
+        Args:
+            preload_model: 是否在初始化时预加载模型
+        """
         # 创建存储目录
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
         os.makedirs(settings.TRANSCRIPTION_DIR, exist_ok=True)
@@ -35,6 +40,17 @@ class TranscriptionService:
         
         # 初始化转写处理器
         self.processor = WhisperXProcessor()
+        
+        # 预加载large-v3-turbo模型
+        if preload_model:
+            try:
+                logger.info("正在预加载large-v3-turbo模型...")
+                preload_start_time = time.time()
+                self.processor.prepare_model("large-v3-turbo")
+                preload_time = time.time() - preload_start_time
+                logger.info(f"large-v3-turbo模型预加载完成，耗时: {preload_time:.2f}秒")
+            except Exception as e:
+                logger.error(f"预加载large-v3-turbo模型失败: {str(e)}")
     
     def create_task(
         self, 

@@ -10,6 +10,7 @@ from app.services.transcription_service import TranscriptionService
 from app.services.cloud_stats import CloudStatsService
 from app.services.mqtt_service import get_mqtt_service
 from app.services.webhook_service import get_webhook_service
+from app.dependencies.services import get_transcription_service
 from app.utils.error_codes import (
     SUCCESS, ERROR_TASK_NOT_FOUND, ERROR_FILE_NOT_FOUND, 
     ERROR_PROCESSING_FAILED, ERROR_MAX_RETRY_EXCEEDED, get_error_message
@@ -19,7 +20,7 @@ from app.utils import get_download_url
 logger = logging.getLogger(__name__)
 
 # 服务实例
-transcription_service = TranscriptionService()
+# transcription_service = TranscriptionService()
 cloud_stats_service = CloudStatsService()
 webhook_service = get_webhook_service()
 
@@ -83,7 +84,7 @@ def check_task_prerequisites(uni_key: str, start_time: float) -> Tuple[Optional[
         如果检查失败，返回 (None, error_result)
     """
     # 获取任务信息
-    task = transcription_service.get_task(uni_key)
+    task = get_transcription_service().get_task(uni_key)
     if not task:
         error_result = create_task_result(
             status="failed",
@@ -97,7 +98,7 @@ def check_task_prerequisites(uni_key: str, start_time: float) -> Tuple[Optional[
     
     # 检查文件是否存在
     if not os.path.exists(task.file_path):
-        transcription_service.update_task(
+        get_transcription_service().update_task(
             uni_key,
             status="failed",
             error_message=get_error_message(ERROR_FILE_NOT_FOUND),
@@ -162,7 +163,7 @@ def process_transcription(self, uni_key: str):
         error_msg = f"任务重试次数已达上限({MAX_RETRY_COUNT}次)"
         
         # 更新任务状态
-        transcription_service.update_task(
+        get_transcription_service().update_task(
             uni_key,
             status="failed",
             error_message=error_msg,
@@ -199,14 +200,14 @@ def process_transcription(self, uni_key: str):
     
     try:
         # 更新任务状态为处理中
-        transcription_service.update_task(
+        get_transcription_service().update_task(
             uni_key,
             status="processing",
             started_at=datetime.now().isoformat()
         )
         
         # 执行转写处理
-        result = transcription_service.process_task_sync(uni_key)
+        result = get_transcription_service().process_task_sync(uni_key)
         
         if result['status'] == 'completed':
             audio_duration = result.get('audio_duration', 0)
@@ -282,7 +283,7 @@ def process_transcription(self, uni_key: str):
         logger.exception(f"处理任务异常: {uni_key} - {error_msg}")
         
         # 更新任务状态
-        transcription_service.update_task(
+        get_transcription_service().update_task(
             uni_key,
             status="failed",
             error_message=error_msg,
@@ -294,7 +295,7 @@ def process_transcription(self, uni_key: str):
         new_retry_count = current_retry_count + 1
         if new_retry_count < MAX_RETRY_COUNT:
             # 更新重试计数
-            transcription_service.update_task(uni_key, retry_count=new_retry_count)
+            get_transcription_service().update_task(uni_key, retry_count=new_retry_count)
             
             # 重新排队
             logger.info(f"重新排队任务 {uni_key}，重试次数: {new_retry_count}/{MAX_RETRY_COUNT}")

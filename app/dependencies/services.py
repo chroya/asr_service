@@ -14,6 +14,6 @@ def get_task_status_service() -> TaskStatusService:
 @lru_cache()
 def get_transcription_service() -> TranscriptionService:
     """
-    获取TranscriptionService的单例实例
+    获取TranscriptionService的单例实例，启用模型预加载
     """
-    return TranscriptionService() 
+    return TranscriptionService(preload_model=True) 

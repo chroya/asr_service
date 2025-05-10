@@ -23,12 +23,13 @@ class TranscriptionService:
     转写服务：管理音频转写任务，包括任务创建、获取、删除等操作
     """
     
-    def __init__(self, preload_model: bool = True):
+    def __init__(self, preload_model: bool = True, is_worker: bool = False):
         """
         初始化转写服务
         
         Args:
             preload_model: 是否在初始化时预加载模型
+            is_worker: 是否运行在celery worker中
         """
         # 创建存储目录
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -41,8 +42,9 @@ class TranscriptionService:
         # 初始化转写处理器
         self.processor = WhisperXProcessor()
         
-        # 预加载large-v3-turbo模型
-        if preload_model:
+        # 检查是否需要预加载模型
+        # 只在Celery worker中预加载或明确指定时
+        if preload_model and is_worker:
             try:
                 logger.info("正在预加载large-v3-turbo模型...")
                 preload_start_time = time.time()
@@ -127,7 +129,7 @@ class TranscriptionService:
             result_path=result_path,
             language=language,
             created_at=datetime.now().isoformat(),
-            extra_params=extra_params.dict() if extra_params else None,
+            extra_params=extra_params.model_dump() if extra_params else None,
             code=SUCCESS,  # 创建任务时设置为成功状态
             message=get_error_message(SUCCESS),  # 没有错误信息
             jwt_token=jwt_token  # 存储JWT令牌
@@ -274,14 +276,31 @@ class TranscriptionService:
             
             # 获取额外参数
             language = task.language
-            speaker_diarization = task.extra_params.speaker if task.extra_params else False
-            whisper_arch = task.extra_params.whisper_arch if task.extra_params else settings.WHISPER_MODEL_NAME
             
-            if task.extra_params and 'language' in task.extra_params:
-                language = task.extra_params.get('language')
-                
-            if task.extra_params and 'speaker' in task.extra_params:
-                speaker_diarization = task.extra_params.get('speaker', False)
+            # 处理extra_params，可能是字典或对象
+            extra_params = task.extra_params
+            speaker_diarization = False
+            whisper_arch = settings.WHISPER_MODEL_NAME
+            
+            if extra_params:
+                # 根据extra_params的类型获取参数
+                if isinstance(extra_params, dict):
+                    speaker_diarization = extra_params.get('speaker', False)
+                    whisper_arch = extra_params.get('whisper_arch', settings.WHISPER_MODEL_NAME)
+                    # 如果字典中有language，则使用它
+                    if 'language' in extra_params:
+                        language = extra_params.get('language')
+                else:
+                    # 假设是TranscriptionExtraParams对象
+                    try:
+                        speaker_diarization = getattr(extra_params, 'speaker', False)
+                        whisper_arch = getattr(extra_params, 'whisper_arch', settings.WHISPER_MODEL_NAME)
+                        language_from_extra = getattr(extra_params, 'language', None)
+                        if language_from_extra:
+                            language = language_from_extra
+                    except AttributeError:
+                        # 如果不是预期的对象类型，记录错误但继续使用默认值
+                        logger.error(f"无法从extra_params获取属性: {type(extra_params)}")
             
             # 开始处理
             start_time = time.time()
@@ -327,13 +346,27 @@ class TranscriptionService:
             celery_concurrency = get_celery_concurrency()
             
             # 准备额外参数，包含GPU信息和Celery并发数
-            extra_params_dict = task.extra_params
-            if isinstance(extra_params_dict, dict):
-                extra_params_dict.update({
-                    "total_gpu_memory": total_gpu_memory,
-                    "free_gpu_memory": free_gpu_memory,
-                    "oncurrency": celery_concurrency
-                })
+            extra_params_dict = {}
+            if task.extra_params:
+                if isinstance(task.extra_params, dict):
+                    extra_params_dict = task.extra_params.copy()
+                else:
+                    # 如果是对象，尝试转换为字典
+                    try:
+                        extra_params_dict = task.extra_params.model_dump()
+                    except AttributeError:
+                        # 尝试使用__dict__
+                        try:
+                            extra_params_dict = vars(task.extra_params)
+                        except TypeError:
+                            logger.error(f"无法将extra_params转换为字典: {type(task.extra_params)}")
+            
+            # 更新GPU和并发信息
+            extra_params_dict.update({
+                "total_gpu_memory": total_gpu_memory,
+                "free_gpu_memory": free_gpu_memory,
+                "concurrency": celery_concurrency
+            })
             
             # 更新任务状态和结果
             self.update_task(

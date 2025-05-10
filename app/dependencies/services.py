@@ -14,6 +14,15 @@ def get_task_status_service() -> TaskStatusService:
 @lru_cache()
 def get_transcription_service() -> TranscriptionService:
     """
-    获取TranscriptionService的单例实例，启用模型预加载
+    获取TranscriptionService的单例实例
+    用于Web API服务，不会预加载模型
     """
-    return TranscriptionService(preload_model=True) 
+    return TranscriptionService(preload_model=False, is_worker=False)
+
+@lru_cache()
+def get_worker_transcription_service() -> TranscriptionService:
+    """
+    获取TranscriptionService的单例实例，用于Celery worker进程
+    将预加载large-v3-turbo模型
+    """
+    return TranscriptionService(preload_model=True, is_worker=True) 

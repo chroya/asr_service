@@ -13,6 +13,7 @@ import signal
 from app.core.celery import celery_app
 from app.core.config import settings
 from app.utils.logging_config import setup_logging
+from app.dependencies.services import get_worker_transcription_service
 
 
 # 设置资源限制
@@ -47,6 +48,18 @@ def handle_exit_signal(signum, frame):
     gc.collect()
     sys.exit(0)
 
+def initialize_worker():
+    """
+    初始化worker，预加载模型
+    """
+    logger.info("正在初始化worker...")
+    
+    # 预加载转写模型
+    logger.info("预加载large-v3-turbo模型...")
+    # 此处调用会触发模型预加载
+    transcription_service = get_worker_transcription_service()
+    logger.info("模型预加载完成")
+
 if __name__ == "__main__":
     # 设置日志
     setup_logging()
@@ -59,6 +72,9 @@ if __name__ == "__main__":
     
     # 设置资源限制
     # set_resource_limits()
+    
+    # 初始化worker
+    initialize_worker()
     
     # 打印注册的任务
     logger.info(f"注册的任务: {list(celery_app.tasks.keys())}")

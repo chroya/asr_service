@@ -74,9 +74,10 @@ def create_app() -> FastAPI:
         应用启动时的初始化工作
         """
         logger.info("应用启动，初始化服务...")
-        # 预热服务实例
+        # 预热服务实例，但不加载模型
         get_task_status_service()
-        get_transcription_service()
+        logger.info("初始化转写服务（无模型预加载）...")
+        get_transcription_service()  # 此调用现在不会预加载模型
         logger.info("服务初始化完成")
 
     @app.on_event("shutdown")

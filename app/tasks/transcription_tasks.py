@@ -215,11 +215,14 @@ def process_transcription(self, uni_key: str):
             # 报告任务完成
             cloud_stats_service.report_task_completion(task.client_id, audio_duration)
             
+            # 重新获取任务信息，确保获取最新的extra_params（包含GPU和并发信息）
+            updated_task = get_worker_transcription_service().get_task(uni_key)
+            
             # 使用结果文件的文件名拼出下载URL
             download_url = get_download_url(task.result_path)
             # 发送Webhook通知
             webhook_service.send_transcription_complete(
-                extra_params=task.extra_params or {},
+                extra_params=updated_task.extra_params or {},
                 result= download_url,  # JSON 文件下载地址
                 code=SUCCESS,
                 use_time=int(time.time() - start_time),

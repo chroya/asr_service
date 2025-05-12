@@ -1,6 +1,9 @@
 import json
 import logging
 import requests
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional, Union
 from pydantic import BaseModel
 
@@ -18,6 +21,11 @@ class WebhookService:
         # 从配置中读取Webhook接口地址
         self.webhook_url = settings.WEBHOOK_TRANSCRIPTION_URL
         self.timeout = settings.WEBHOOK_TIMEOUT
+        # 重试相关参数
+        self.max_retries = 2  # 最大重试次数
+        self.retry_delay = 3  # 重试间隔（秒）
+        # 线程池
+        self.executor = ThreadPoolExecutor(max_workers=5)
     
     def send_transcription_complete(
         self,
@@ -28,7 +36,7 @@ class WebhookService:
         jwt_token: Optional[str] = None
     ) -> bool:
         """
-        发送转写完成的webhook通知
+        发送转写完成的webhook通知（非阻塞）
         
         Args:
             extra_params: 给uploadfile的参数，可以是字典或Pydantic模型
@@ -38,7 +46,7 @@ class WebhookService:
             jwt_token: JWT令牌，用于认证
             
         Returns:
-            bool: 发送是否成功
+            bool: 请求是否已提交（不代表发送成功）
         """
         try:
             # 如果extra_params是Pydantic模型，转换为字典
@@ -56,8 +64,6 @@ class WebhookService:
                 "use_time": use_time
             }
             
-            logger.info(f"发送Webhook通知: {json.dumps(webhook_data)}")
-            
             # 准备请求头
             headers = {
                 "Content-Type": "application/json",
@@ -68,25 +74,67 @@ class WebhookService:
             if jwt_token:
                 headers["Authorization"] = f"Bearer {jwt_token}"
             
-            # 发送POST请求
-            response = requests.post(
-                self.webhook_url,
-                json=webhook_data,
-                timeout=self.timeout,
-                headers=headers
+            # 提交异步任务到线程池
+            self.executor.submit(
+                self._send_webhook_with_retries,
+                webhook_data,
+                headers
             )
             
-            # 检查响应
-            if response.status_code == 200:
-                logger.info(f"Webhook发送成功: {response.status_code}")
-                return True
-            else:
-                logger.warning(f"Webhook发送失败: 状态码 {response.status_code}, 响应: {response.text}")
-                return False
+            return True
                 
         except Exception as e:
-            logger.exception(f"发送webhook失败: {str(e)}")
+            logger.exception(f"准备webhook数据失败: {str(e)}")
             return False
+    
+    def _send_webhook_with_retries(self, webhook_data: Dict[str, Any], headers: Dict[str, str]) -> None:
+        """
+        带重试的webhook发送实现（在线程池中执行）
+        
+        Args:
+            webhook_data: webhook数据
+            headers: HTTP请求头
+        """
+        retry_count = 0
+        while retry_count <= self.max_retries:
+            try:
+                if retry_count > 0:
+                    logger.info(f"尝试第{retry_count}次重新发送webhook...")
+                
+                logger.info(f"发送Webhook通知: {json.dumps(webhook_data)}")
+                
+                response = requests.post(
+                    self.webhook_url,
+                    json=webhook_data,
+                    timeout=self.timeout,
+                    headers=headers
+                )
+                
+                # 检查响应
+                if response.status_code == 200:
+                    logger.info(f"Webhook发送成功: {response.status_code}")
+                    return
+                else:
+                    logger.warning(f"Webhook发送失败: 状态码 {response.status_code}, 响应: {response.text}")
+                    # 如果已达最大重试次数，放弃重试
+                    if retry_count >= self.max_retries:
+                        logger.error(f"Webhook发送失败，已达最大重试次数({self.max_retries})，放弃重试")
+                        return
+                    
+                    # 否则增加重试次数并等待
+                    retry_count += 1
+                    time.sleep(self.retry_delay)
+            
+            except Exception as e:
+                logger.warning(f"发送webhook异常: {str(e)}")
+                # 如果已达最大重试次数，放弃重试
+                if retry_count >= self.max_retries:
+                    logger.exception(f"Webhook发送异常，已达最大重试次数({self.max_retries})，放弃重试")
+                    return
+                
+                # 否则增加重试次数并等待
+                retry_count += 1
+                time.sleep(self.retry_delay)
 
 
 # 单例模式

@@ -171,7 +171,26 @@ class TranscriptionService:
         if not task_data:
             return None
         
-        # 更新字段
+        # 特殊处理extra_params字段，确保嵌套字典的正确更新
+        if 'extra_params' in updates:
+            extra_params_update = updates.pop('extra_params')
+            if extra_params_update is not None:
+                # 如果task_data中已有extra_params字段
+                if 'extra_params' in task_data and task_data['extra_params']:
+                    # 确保它是一个字典
+                    if not isinstance(task_data['extra_params'], dict):
+                        # 尝试转换为字典
+                        try:
+                            task_data['extra_params'] = vars(task_data['extra_params'])
+                        except:
+                            task_data['extra_params'] = {}
+                    # 更新内部字段而不是替换整个字典
+                    task_data['extra_params'].update(extra_params_update)
+                else:
+                    # 如果原来没有extra_params，直接赋值
+                    task_data['extra_params'] = extra_params_update
+        
+        # 更新其他字段
         for key, value in updates.items():
             task_data[key] = value
         

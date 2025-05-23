@@ -48,7 +48,7 @@ class TranscriptionService:
             try:
                 logger.info("正在预加载large-v3-turbo模型...")
                 preload_start_time = time.time()
-                self.processor.prepare_model("large-v3-turbo")
+                # self.processor.prepare_model("large-v3-turbo")
                 preload_time = time.time() - preload_start_time
                 logger.info(f"large-v3-turbo模型预加载完成，耗时: {preload_time:.2f}秒")
             except Exception as e:
@@ -192,7 +192,14 @@ class TranscriptionService:
         
         # 更新其他字段
         for key, value in updates.items():
-            task_data[key] = value
+            if key == 'extra_params' and isinstance(value, dict):
+                # 如果是extra_params且是字典，则合并更新
+                if 'extra_params' in task_data:
+                    task_data['extra_params'].update(value)
+                else:
+                    task_data['extra_params'] = value
+            else:
+                task_data[key] = value
         
         # 保存更新后的数据
         self.storage.save(uni_key, task_data)

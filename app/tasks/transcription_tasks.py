@@ -208,6 +208,8 @@ def process_transcription(self, uni_key: str):
         
         # 执行转写处理
         result = get_worker_transcription_service().process_task_sync(uni_key)
+        # 重新获取一次任务信息
+        task = get_worker_transcription_service().get_task(uni_key)
         
         if result['status'] == 'completed':
             audio_duration = result.get('audio_duration', 0)

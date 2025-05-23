@@ -38,11 +38,15 @@
                 <div class="col-md-6">
                     <p><strong>Whisper模型:</strong> <span id="whisper-arch">-</span></p>
                     <p><strong>内容ID:</strong> <span id="content-id">-</span></p>
-                </div>
-                <div class="col-md-6">
                     <p><strong>服务器ID:</strong> <span id="server-id">-</span></p>
                 </div>
+                <div class="col-md-6">
+                    <p><strong>GPU总内存:</strong> <span id="gpu-total-memory">-</span></p>
+                    <p><strong>GPU剩余内存:</strong> <span id="gpu-free-memory">-</span></p>
+                    <p><strong>并发任务数:</strong> <span id="concurrency-count">-</span></p>
+                </div>
             </div>
+            
             
             <!-- 处理耗时明细 -->
             <!-- <div class="row mt-3">
@@ -213,6 +217,12 @@
                 document.getElementById('whisper-arch').textContent = extraParams.whisper_arch || '-';
                 document.getElementById('content-id').textContent = extraParams.content_id || '-';
                 document.getElementById('server-id').textContent = extraParams.server_id || '-';
+
+                // 更新GPU信息和并发数
+                document.getElementById('gpu-total-memory').textContent = extraParams.total_gpu_memory ? formatFileSize(extraParams.total_gpu_memory * 1024 * 1024) : '-';
+                document.getElementById('gpu-free-memory').textContent = extraParams.free_gpu_memory ? formatFileSize(extraParams.free_gpu_memory * 1024 * 1024) : '-';
+                document.getElementById('concurrency-count').textContent = extraParams.concurrency || '-';
+                
                 
                 // 更新音频时长和处理耗时
                 document.getElementById('audio-duration').textContent = data.audio_duration ? formatDuration(data.audio_duration) : '-';

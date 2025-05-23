@@ -97,7 +97,7 @@ if __name__ == "__main__":
             "--loglevel=info",
             "-P", "prefork",
             "--concurrency", str(concurrency),
-            "--pool", "solo",  # 开发环境中使用solo池，生产环境得去掉
+            # "--pool", "solo",  # 开发环境中使用solo池，生产环境得去掉
             "--time-limit", str(time_limit),
             "--max-tasks-per-child", str(max_tasks_per_child),
             "--without-gossip",
